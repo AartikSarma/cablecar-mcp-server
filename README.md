@@ -1,4 +1,4 @@
-# CableCar Clinical Research Platform
+# CableCar MCP Server
 
 **Connecting AI to Big Longitudinal EMRs for Clinical Analytics and Research**
 
