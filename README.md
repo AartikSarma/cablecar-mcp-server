@@ -31,26 +31,32 @@ CableCar uses a **modular plugin architecture** that makes it easy to add new an
 
 ### Key Features
 
-🔌 **Modular Plugin System**
-- Automatic plugin discovery and loading
-- Standardized analysis interface
-- Dynamic MCP tool generation
+🔌 **Unified Plugin Architecture** *(New!)*
+- All analysis functions implemented as modular plugins
+- Single source of truth - no code duplication
+- Automatic plugin discovery and loading  
+- Standardized analysis interface with validation
+- Dynamic MCP tool generation with full metadata
+- Hot-pluggable extensions without server restart
 
 🔒 **Privacy-First Design** 
 - Cell suppression for small counts
 - Automatic PHI removal
-- Configurable privacy levels
+- Configurable privacy levels (Standard/High/Maximum)
 - Comprehensive audit trails
+- Local processing - data never leaves your system
 
 📈 **Standards Compliance**
-- STROBE reporting for observational studies
-- TRIPOD+AI for prediction models
-- Publication-ready outputs
+- **STROBE reporting** for observational studies
+- **TRIPOD+AI** for prediction models with ML interpretability
+- Publication-ready outputs with checklists
+- Comprehensive sensitivity analysis support
 
 🌐 **Multi-Site Ready**
-- Generates portable analysis code
-- Federated research support
+- Generates portable analysis code (Python/R)
+- Federated research support with Docker containers
 - No patient data sharing required
+- Identical analysis execution across sites
 
 ## 🚀 Quick Start
 
@@ -92,20 +98,36 @@ Add to your Claude Desktop MCP settings:
 
 ## 📊 Available Analysis Tools
 
-### Core System Tools
-- `import_dataset` - Load and validate clinical datasets
-- `design_study` - Interactive study design guidance
-- `explore_data` - Privacy-safe data exploration
-- `generate_strobe_report` - STROBE-compliant reports
-- `generate_tripod_report` - TRIPOD+AI prediction model reports
-- `export_analysis_code` - Generate reproducible analysis scripts
+### Core System Tools (7)
+- `import_dataset` - Load and validate clinical datasets with schema checking
+- `design_study` - Interactive study design wizard with methodological guidance
+- `explore_data` - Comprehensive data exploration with privacy-safe summaries
+- `export_analysis_code` - Generate complete, reproducible analysis code for multi-site validation
+- `get_analysis_summary` - Get summary of all analyses performed in current session
+- `get_privacy_report` - Generate comprehensive privacy compliance report
+- `list_available_plugins` - List all available analysis plugins and their capabilities
 
-### Analysis Plugins
-- `run_descriptive_statistics` - Comprehensive Table 1 generation
-- `run_propensity_score_matching` - Causal inference analysis
-- `list_available_plugins` - Browse all available analysis plugins
+### Analysis Plugins (9)
+All analysis functions are now implemented as modular plugins with standardized interfaces:
 
-*New plugins are automatically discovered and available as MCP tools*
+**📊 Descriptive & Exploratory**
+- `run_descriptive_statistics` - Publication-ready Table 1 with statistical tests and stratification
+- `run_exploratory_data_analysis` - Comprehensive EDA with data quality, distributions, correlations, outliers
+
+**🔬 Statistical Testing & Modeling**  
+- `run_hypothesis_testing` - Comprehensive statistical hypothesis testing with multiple comparison corrections
+- `run_regression_analysis` - Linear, logistic, and Cox regression with diagnostics and validation
+- `run_ml_models` - AutoML with validation, interpretability, and TRIPOD+AI compliance
+
+**🎯 Specialized Analyses**
+- `run_propensity_score_matching` - Propensity score matching for causal inference
+- `run_sensitivity_analysis` - Robustness testing for missing data, outliers, definitions, and subgroups
+
+**📝 Standards-Compliant Reporting**
+- `run_strobe_reporter` - STROBE-compliant reports for observational studies  
+- `run_tripod_reporter` - TRIPOD+AI compliant reports for prediction model studies
+
+*All plugins are automatically discovered and available as MCP tools with full metadata and validation*
 
 ## 🔧 Usage Examples
 
@@ -132,16 +154,20 @@ run_descriptive_statistics(
     output_format="publication"
 )
 
-# 4. Test your hypothesis
-test_hypotheses(
+# 4. Test your hypothesis  
+run_hypothesis_testing(
     outcome_variables=["mortality", "length_of_stay"],
     group_variable="antibiotic_timing",
     correction_method="fdr_bh"
 )
 
 # 5. Generate publication report
-generate_strobe_report(
-    output_format="markdown",
+run_strobe_reporter(
+    study_design="cohort",
+    study_title="Early Antibiotic Therapy and Clinical Outcomes",
+    study_objective="To assess the impact of early antibiotic therapy on patient outcomes",
+    primary_exposure="antibiotic_timing",
+    primary_outcome="mortality",
     include_checklist=true
 )
 
@@ -155,13 +181,42 @@ export_analysis_code(
 ### Advanced Analysis with Plugins
 
 ```python
+# Comprehensive exploratory data analysis
+run_exploratory_data_analysis(
+    target_variable="mortality",
+    include_correlations=true,
+    include_distributions=true,
+    include_outlier_detection=true
+)
+
 # Propensity score matching for causal inference
 run_propensity_score_matching(
     treatment_variable="antibiotic_timing",
-    outcome_variables=["mortality", "length_of_stay"],
+    outcome_variables=["mortality", "length_of_stay"], 
     matching_variables=["age", "sex", "severity_score"],
     matching_ratio=1,
     output_format="detailed"
+)
+
+# Sensitivity analysis for robustness testing
+run_sensitivity_analysis(
+    primary_results=previous_analysis_results,
+    outcome_column="mortality",
+    missing_data_methods=["complete_case", "multiple_imputation"],
+    outlier_methods=["iqr", "isolation_forest"],
+    sensitivity_threshold=0.2
+)
+
+# Generate TRIPOD+AI compliant prediction model report
+run_tripod_reporter(
+    study_type="development_and_validation",
+    model_title="ICU Mortality Prediction Model",
+    study_objective="Develop and validate a model to predict ICU mortality",
+    intended_use="Clinical decision support for ICU risk stratification",
+    outcome_variable="mortality",
+    outcome_type="binary",
+    predictor_variables=["age", "severity_score", "comorbidities"],
+    model_type="machine_learning"
 )
 ```
 
@@ -189,28 +244,59 @@ This creates:
 Every plugin implements the `BaseAnalysis` interface:
 
 ```python
-from cablecar_research.analysis.base import BaseAnalysis, AnalysisMetadata
+from cablecar_research.analysis.base import BaseAnalysis, AnalysisMetadata, AnalysisType
 
 class SurvivalAnalysisPlugin(BaseAnalysis):
     metadata = AnalysisMetadata(
         name="survival_analysis",
-        display_name="Survival Analysis",
-        description="Cox proportional hazards survival analysis",
+        display_name="Survival Analysis", 
+        description="Cox proportional hazards survival analysis with comprehensive diagnostics",
         analysis_type=AnalysisType.INFERENTIAL,
-        # ... additional metadata
+        required_columns=["time", "event"],
+        optional_columns=["covariates"],
+        parameters={
+            "time_column": {
+                "type": "string",
+                "description": "Time to event or censoring column",
+                "required": True
+            },
+            "event_column": {
+                "type": "string", 
+                "description": "Binary event indicator column",
+                "required": True
+            },
+            "covariate_columns": {
+                "type": "list",
+                "description": "List of covariate columns for Cox model",
+                "required": False,
+                "default": []
+            }
+        }
     )
     
-    def validate_inputs(self, **kwargs) -> Dict[str, Any]:
-        """Validate analysis inputs"""
+    def validate_inputs(self, df: pd.DataFrame, **kwargs) -> List[str]:
+        """Validate analysis inputs - returns list of error messages"""
+        errors = []
+        if 'time_column' not in kwargs:
+            errors.append("time_column is required")
+        # ... additional validation
+        return errors
         
-    def run_analysis(self, **kwargs) -> Dict[str, Any]:
-        """Execute the analysis"""
+    def run_analysis(self, df: pd.DataFrame, **kwargs) -> Dict[str, Any]:
+        """Execute the survival analysis"""
+        time_col = kwargs['time_column']
+        event_col = kwargs['event_column']
+        # ... analysis implementation
+        return results
         
-    def format_results(self, results, format_type="standard") -> str:
+    def format_results(self, results: Dict[str, Any]) -> str:
         """Format results for display"""
+        # ... formatting implementation
+        return formatted_output
         
-    def get_required_parameters(self) -> Dict[str, Dict[str, Any]]:
-        """Define parameter schema for MCP integration"""
+    def get_required_parameters(self) -> List[str]:
+        """Get list of required parameters"""
+        return ["time_column", "event_column"]
 ```
 
 Your plugin is automatically:

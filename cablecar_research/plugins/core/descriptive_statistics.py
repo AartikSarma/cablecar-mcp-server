@@ -87,13 +87,15 @@ class DescriptiveStatisticsPlugin(BaseAnalysis):
         categorical_vars = kwargs.get('categorical_vars', [])
         continuous_vars = kwargs.get('continuous_vars', [])
         non_normal_vars = kwargs.get('non_normal_vars', [])
+        include_tests = kwargs.get('include_statistical_tests', False)
         
         results = {
             'analysis_type': 'descriptive_statistics',
             'variables_analyzed': variables,
             'sample_size': len(self.df),
             'stratified': stratify_by is not None,
-            'stratification_variable': stratify_by
+            'stratification_variable': stratify_by,
+            'timestamp': pd.Timestamp.now().isoformat()
         }
         
         # Generate overall statistics
@@ -116,14 +118,16 @@ class DescriptiveStatisticsPlugin(BaseAnalysis):
                 )
                 stratified_stats[f"{stratify_by}_{stratum}"] = stratum_stats
             
-            # Compute p-values for group comparisons
-            for var in variables:
-                p_val = self._compute_group_comparison(var, stratify_by)
-                if p_val is not None:
-                    p_values[var] = p_val
+            # Compute p-values for group comparisons if requested
+            if include_tests:
+                for var in variables:
+                    p_val = self._compute_group_comparison(var, stratify_by)
+                    if p_val is not None:
+                        p_values[var] = p_val
             
             results['stratified'] = stratified_stats
-            results['p_values'] = p_values
+            if p_values:
+                results['p_values'] = p_values
         
         # Apply privacy protection if available
         if self.privacy_guard:
@@ -176,6 +180,16 @@ class DescriptiveStatisticsPlugin(BaseAnalysis):
                 'include_missing_analysis': {
                     'type': 'boolean',
                     'description': 'Include detailed missing data analysis',
+                    'example': True
+                },
+                'include_statistical_tests': {
+                    'type': 'boolean',
+                    'description': 'Include statistical tests between groups',
+                    'example': True
+                },
+                'generate_table1': {
+                    'type': 'boolean',
+                    'description': 'Generate publication-ready Table 1 format',
                     'example': True
                 }
             }
@@ -357,47 +371,102 @@ class DescriptiveStatisticsPlugin(BaseAnalysis):
         """Publication-ready Table 1 format."""
         output = "Table 1. Baseline Characteristics\n"
         output += "="*50 + "\n\n"
-        output += f"Characteristic\tOverall (N={results['sample_size']})"
         
+        # Handle both overall sample and stratified results
         if results.get('stratified'):
-            strata_names = [k.replace(f"{results['stratification_variable']}_", "") 
+            # Stratified table format
+            stratify_var = results.get('stratification_variable', 'Group')
+            strata_names = [k.replace(f"{stratify_var}_", "") 
                            for k in results['stratified'].keys()]
+            
+            # Header
+            output += f"Characteristic\tOverall (N={results['sample_size']:,})"
             for name in strata_names:
-                output += f"\t{name}"
-            output += "\tp-value"
-        
-        output += "\n" + "-"*80 + "\n"
-        
-        # Add variables
-        for var in results['variables_analyzed']:
-            if var in results['overall']:
-                stats = results['overall'][var]
-                output += f"{var.replace('_', ' ').title()}"
-                
-                if stats['type'] == 'categorical':
-                    for category, freq in stats['categories'].items():
-                        output += f"\n  {category}\t{freq}"
-                        
-                        # Add stratified data
-                        if results.get('stratified'):
+                # Get sample size for this stratum
+                stratum_key = f"{stratify_var}_{name}"
+                if stratum_key in results['stratified']:
+                    stratum_size = len([v for v in results['stratified'][stratum_key].values() 
+                                      if isinstance(v, dict) and 'n_valid' in v])
+                    output += f"\t{name}"
+                else:
+                    output += f"\t{name}"
+            
+            if results.get('p_values'):
+                output += "\tp-value"
+            
+            output += "\n" + "-"*80 + "\n"
+            
+            # Variables
+            for var in results['variables_analyzed']:
+                if var in results['overall']:
+                    stats = results['overall'][var]
+                    var_display = var.replace('_', ' ').title()
+                    
+                    if stats['type'] == 'categorical':
+                        output += f"{var_display}\n"
+                        for category, freq in stats['categories'].items():
+                            output += f"  {category}\t{freq}"
+                            
+                            # Add stratified data
                             for stratum_name, stratum_data in results['stratified'].items():
                                 if var in stratum_data:
                                     cat_data = stratum_data[var]['categories'].get(category, "0 (0.0%)")
                                     output += f"\t{cat_data}"
-                else:
-                    output += f"\t{stats['summary']}"
-                    
-                    # Add stratified data
-                    if results.get('stratified'):
+                                else:
+                                    output += "\t-"
+                            
+                            # Add p-value (only on first category line)
+                            if category == list(stats['categories'].keys())[0]:
+                                if results.get('p_values') and var in results['p_values']:
+                                    p_val = results['p_values'][var]
+                                    significance = "*" if p_val < 0.05 else ""
+                                    output += f"\t{p_val:.3f}{significance}"
+                                elif results.get('p_values'):
+                                    output += "\t-"
+                            
+                            output += "\n"
+                    else:
+                        # Continuous variable
+                        output += f"{var_display}\t{stats['summary']}"
+                        
+                        # Add stratified data
                         for stratum_name, stratum_data in results['stratified'].items():
                             if var in stratum_data:
                                 output += f"\t{stratum_data[var]['summary']}"
-                
-                # Add p-value
-                if results.get('p_values') and var in results['p_values']:
-                    p_val = results['p_values'][var]
-                    output += f"\t{p_val:.3f}"
-                
-                output += "\n"
+                            else:
+                                output += "\t-"
+                        
+                        # Add p-value
+                        if results.get('p_values') and var in results['p_values']:
+                            p_val = results['p_values'][var]
+                            significance = "*" if p_val < 0.05 else ""
+                            output += f"\t{p_val:.3f}{significance}"
+                        elif results.get('p_values'):
+                            output += "\t-"
+                        
+                        output += "\n"
+        else:
+            # Simple overall table
+            output += f"Characteristic\tOverall (N={results['sample_size']:,})\n"
+            output += "-"*40 + "\n"
+            
+            for var in results['variables_analyzed']:
+                if var in results['overall']:
+                    stats = results['overall'][var]
+                    var_display = var.replace('_', ' ').title()
+                    
+                    if stats['type'] == 'categorical':
+                        output += f"{var_display}\n"
+                        for category, freq in stats['categories'].items():
+                            output += f"  {category}\t{freq}\n"
+                    else:
+                        output += f"{var_display}\t{stats['summary']}\n"
+        
+        # Add footnotes
+        output += "\n" + "-"*40 + "\n"
+        output += "Continuous variables: mean ± SD or median (IQR)\n"
+        output += "Categorical variables: n (%)\n"
+        if results.get('p_values'):
+            output += "* p < 0.05\n"
         
         return output

@@ -23,6 +23,11 @@ class AnalysisType(Enum):
     TIME_SERIES = "time_series"
     NETWORK_ANALYSIS = "network_analysis"
     SENSITIVITY_ANALYSIS = "sensitivity_analysis"
+    EXPLORATORY = "exploratory"
+    INFERENTIAL = "inferential"
+    PREDICTIVE = "predictive"
+    VALIDATION = "validation"
+    REPORTING = "reporting"
     CUSTOM = "custom"
 
 
@@ -40,8 +45,8 @@ class AnalysisMetadata:
     name: str
     display_name: str
     description: str
-    version: str
-    author: str
+    version: str = "1.0.0"
+    author: str = "CableCar Team"
     email: Optional[str] = None
     analysis_type: AnalysisType = AnalysisType.CUSTOM
     validation_level: ValidationLevel = ValidationLevel.STANDARD
@@ -49,6 +54,9 @@ class AnalysisMetadata:
     doi: Optional[str] = None
     requirements: Optional[List[str]] = None
     keywords: Optional[List[str]] = None
+    required_columns: Optional[List[str]] = None
+    optional_columns: Optional[List[str]] = None
+    parameters: Optional[Dict[str, Any]] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert metadata to dictionary."""

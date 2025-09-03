@@ -10,11 +10,12 @@ Generates comprehensive synthetic clinical datasets with:
 
 import pandas as pd
 import numpy as np
+import json
 from datetime import datetime, timedelta
 import random
 from faker import Faker
 import os
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
 
 # Set random seeds for reproducibility

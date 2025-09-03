@@ -1,0 +1,13 @@
+{
+  "cablecar": {
+    "command": "python",
+    "args": [
+      "-m", "server.main",
+      "--log-level", "INFO"
+    ],
+    "cwd": "/Users/aartiksarma/Projects/clif_mcp_server",
+    "env": {
+      "PYTHONPATH": "/Users/aartiksarma/Projects/clif_mcp_server"
+    }
+  }
+}
