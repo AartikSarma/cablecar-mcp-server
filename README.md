@@ -64,7 +64,7 @@ CableCar uses a **modular plugin architecture** that makes it easy to add new an
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/clif_mcp_server.git
+git clone https://github.com/AartikSarma/cablecar-mcp-server.git
 cd clif_mcp_server
 
 # Install dependencies
