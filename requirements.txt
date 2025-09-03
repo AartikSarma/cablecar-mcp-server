@@ -27,3 +27,23 @@ mypy>=1.5.0
 
 # Data generation
 faker>=18.0.0
+
+# Machine Learning & AutoML
+xgboost>=1.7.0
+lightgbm>=3.3.0
+catboost>=1.2.0
+optuna>=3.0.0  # For hyperparameter optimization
+shap>=0.42.0   # For model interpretability
+
+# Advanced statistics
+pingouin>=0.5.0  # For additional statistical tests
+factor-analyzer>=0.4.0  # For factor analysis
+
+# Report generation
+reportlab>=4.0.0  # For PDF generation
+python-docx>=0.8.11  # For Word document generation
+openpyxl>=3.1.0  # For Excel export
+
+# Data format support
+pyarrow>=12.0.0  # Already included above
+h5py>=3.9.0  # For HDF5 support
