@@ -58,11 +58,12 @@ class DescriptiveStatisticsPlugin(BaseAnalysis):
             validation['valid'] = False
             validation['errors'].append("'variables' must be a list")
         else:
-            # Check if variables exist in data
-            missing_vars = [var for var in variables if var not in self.df.columns]
-            if missing_vars:
+            # Use the enhanced validation from base class
+            var_validation = self.validate_variables_exist(variables, "descriptive statistics")
+            if not var_validation['valid']:
                 validation['valid'] = False
-                validation['errors'].append(f"Variables not found in data: {missing_vars}")
+                validation['errors'].extend(var_validation['errors'])
+                validation['suggestions'].extend(var_validation['suggestions'])
         
         # Check stratification variable if provided
         stratify_by = kwargs.get('stratify_by')

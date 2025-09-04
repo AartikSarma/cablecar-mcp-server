@@ -111,36 +111,51 @@ class ExploratoryDataAnalysisPlugin(BaseAnalysis):
         }
     )
     
-    def __init__(self, privacy_guard=None):
-        super().__init__(privacy_guard)
+    def __init__(self, df=None, privacy_guard=None, **kwargs):
+        super().__init__(df, privacy_guard, **kwargs)
         
-    def validate_inputs(self, df: pd.DataFrame, **kwargs) -> List[str]:
+    def validate_inputs(self, **kwargs) -> Dict[str, Any]:
         """Validate inputs for exploratory data analysis."""
-        errors = []
+        validation = {
+            'valid': True,
+            'errors': [],
+            'warnings': [],
+            'suggestions': []
+        }
         
-        if df.empty:
-            errors.append("DataFrame cannot be empty")
+        if self.df is None:
+            validation['valid'] = False
+            validation['errors'].append("No data loaded")
+            return validation
+        
+        if self.df.empty:
+            validation['valid'] = False
+            validation['errors'].append("DataFrame cannot be empty")
+            return validation
             
-        if len(df) < 10:
-            errors.append("Dataset too small for meaningful exploratory analysis (minimum 10 rows)")
+        if len(self.df) < 10:
+            validation['warnings'].append("Dataset too small for meaningful exploratory analysis (minimum 10 rows)")
             
         target_variable = kwargs.get('target_variable')
-        if target_variable and target_variable not in df.columns:
-            errors.append(f"Target variable '{target_variable}' not found in data")
+        if target_variable and target_variable not in self.df.columns:
+            validation['valid'] = False
+            validation['errors'].append(f"Target variable '{target_variable}' not found in data")
             
         categorical_variables = kwargs.get('categorical_variables', [])
         for var in categorical_variables:
-            if var not in df.columns:
-                errors.append(f"Categorical variable '{var}' not found in data")
+            if var not in self.df.columns:
+                validation['valid'] = False
+                validation['errors'].append(f"Categorical variable '{var}' not found in data")
                 
         continuous_variables = kwargs.get('continuous_variables', [])
         for var in continuous_variables:
-            if var not in df.columns:
-                errors.append(f"Continuous variable '{var}' not found in data")
+            if var not in self.df.columns:
+                validation['valid'] = False
+                validation['errors'].append(f"Continuous variable '{var}' not found in data")
                 
-        return errors
+        return validation
     
-    def run_analysis(self, df: pd.DataFrame, **kwargs) -> Dict[str, Any]:
+    def run_analysis(self, **kwargs) -> Dict[str, Any]:
         """Run comprehensive exploratory data analysis."""
         
         target_variable = kwargs.get('target_variable')
@@ -156,8 +171,8 @@ class ExploratoryDataAnalysisPlugin(BaseAnalysis):
         
         results = {
             'summary': {
-                'n_observations': len(df),
-                'n_variables': len(df.columns),
+                'n_observations': len(self.df),
+                'n_variables': len(self.df.columns),
                 'data_quality_score': 0.0,
                 'completeness_rate': 0.0
             },
@@ -173,42 +188,42 @@ class ExploratoryDataAnalysisPlugin(BaseAnalysis):
         
         # Automatically classify variables if not provided
         if not categorical_variables and not continuous_variables:
-            categorical_variables, continuous_variables = self._classify_variables(df)
+            categorical_variables, continuous_variables = self._classify_variables(self.df)
         
         # Data quality assessment
-        quality_results = self._assess_data_quality(df)
+        quality_results = self._assess_data_quality(self.df)
         results['data_quality'] = quality_results
         results['summary']['completeness_rate'] = quality_results['overall_completeness']
         results['summary']['data_quality_score'] = quality_results['quality_score']
         
         # Variable profiling
-        profile_results = self._profile_variables(df, categorical_variables, continuous_variables)
+        profile_results = self._profile_variables(self.df, categorical_variables, continuous_variables)
         results['variable_profiles'] = profile_results
         
         # Missing data analysis
         if include_missing_patterns:
-            missing_results = self._analyze_missing_patterns(df)
+            missing_results = self._analyze_missing_patterns(self.df)
             results['missing_data_analysis'] = missing_results
         
         # Distribution analysis
         if include_distributions:
-            distribution_results = self._analyze_distributions(df, continuous_variables, significance_level)
+            distribution_results = self._analyze_distributions(self.df, continuous_variables, significance_level)
             results['distribution_analysis'] = distribution_results
         
         # Correlation analysis
         if include_correlations and len(continuous_variables) > 1:
-            correlation_results = self._analyze_correlations(df, continuous_variables, correlation_method)
+            correlation_results = self._analyze_correlations(self.df, continuous_variables, correlation_method)
             results['correlation_analysis'] = correlation_results
         
         # Outlier analysis
         if include_outlier_detection:
-            outlier_results = self._detect_outliers(df, continuous_variables, outlier_method)
+            outlier_results = self._detect_outliers(self.df, continuous_variables, outlier_method)
             results['outlier_analysis'] = outlier_results
         
         # Target variable analysis
         if target_variable:
             target_results = self._analyze_target_variable(
-                df, target_variable, categorical_variables, continuous_variables
+                self.df, target_variable, categorical_variables, continuous_variables
             )
             results['target_variable_analysis'] = target_results
         

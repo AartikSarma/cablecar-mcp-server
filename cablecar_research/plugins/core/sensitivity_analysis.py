@@ -90,14 +90,14 @@ class SensitivityAnalysisPlugin(BaseAnalysis):
         }
     )
     
-    def __init__(self, privacy_guard=None):
-        super().__init__(privacy_guard)
+    def __init__(self, df=None, privacy_guard=None, **kwargs):
+        super().__init__(df, privacy_guard, **kwargs)
         
     def validate_inputs(self, df: pd.DataFrame, **kwargs) -> List[str]:
         """Validate inputs for sensitivity analysis."""
         errors = []
         
-        if df.empty:
+        if self.df is None or self.df.empty:
             errors.append("DataFrame cannot be empty")
             
         outcome_column = kwargs.get('outcome_column')
@@ -119,7 +119,7 @@ class SensitivityAnalysisPlugin(BaseAnalysis):
         if not primary_results or not isinstance(primary_results, dict):
             errors.append("primary_results must be provided as a dictionary")
             
-        return errors
+        return {"valid": len(errors) == 0, "errors": errors, "warnings": [], "suggestions": []}
     
     def run_analysis(self, df: pd.DataFrame, **kwargs) -> Dict[str, Any]:
         """Run comprehensive sensitivity analysis."""

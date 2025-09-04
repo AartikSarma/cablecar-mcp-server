@@ -25,6 +25,7 @@ from mcp.types import Tool, TextContent
 from cablecar_research.data_import.loaders import DataLoader
 from cablecar_research.privacy.protection import PrivacyGuard
 from cablecar_research.registry import get_registry, initialize_registry
+from cablecar_research.analysis.descriptive import DescriptiveAnalysis
 
 # Import server tools
 from .tools.study_designer import StudyDesigner
@@ -206,6 +207,26 @@ async def list_tools() -> List[Tool]:
                     }
                 }
             }
+        ),
+        
+        Tool(
+            name="get_data_dictionary",
+            description="Get detailed information about available variables and their types",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "include_summary_stats": {
+                        "type": "boolean",
+                        "description": "Include basic summary statistics for each variable",
+                        "default": True
+                    },
+                    "variable_pattern": {
+                        "type": "string", 
+                        "description": "Filter variables by name pattern (regex supported)",
+                        "required": False
+                    }
+                }
+            }
         )
     ]
     
@@ -236,16 +257,16 @@ async def call_tool(name: str, arguments: dict) -> List[TextContent]:
                     plugin_name = name.replace('run_', '')
                     plugin_class = registry.get_plugin(plugin_name)
                     if plugin_class:
-                        plugin_instance = plugin_class(server_state['privacy_guard'])
+                        plugin_instance = plugin_class(main_df, server_state['privacy_guard'])
                         
                         # Validate inputs
-                        validation_errors = plugin_instance.validate_inputs(main_df, **arguments)
-                        if validation_errors:
-                            error_msg = "Validation failed: " + "; ".join(validation_errors)
+                        validation_result = plugin_instance.validate_inputs(**arguments)
+                        if not validation_result.get('valid', True):
+                            error_msg = "Validation failed: " + "; ".join(validation_result.get('errors', ['Unknown validation error']))
                             return [TextContent(type="text", text=error_msg)]
                         
                         # Run analysis
-                        results = plugin_instance.run_analysis(main_df, **arguments)
+                        results = plugin_instance.run_analysis(**arguments)
                         
                         # Format results
                         formatted_results = plugin_instance.format_results(results)
@@ -308,6 +329,9 @@ async def call_tool(name: str, arguments: dict) -> List[TextContent]:
         
         elif name == "list_available_plugins":
             return await _list_available_plugins(arguments)
+        
+        elif name == "get_data_dictionary":
+            return await _get_data_dictionary(arguments)
         
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
@@ -450,6 +474,25 @@ async def _explore_data(arguments: dict) -> List[TextContent]:
     
     # Determine variables to explore
     if variables:
+        # Validate requested variables exist
+        missing_vars = [var for var in variables if var not in main_df.columns]
+        if missing_vars:
+            available_vars = [col for col in main_df.columns 
+                            if not col.endswith('_id') and col not in ['patient_id', 'hospitalization_id']]
+            
+            error_msg = f"""Variable Validation Error
+{"="*50}
+
+Requested variables not found: {missing_vars}
+
+Available variables for analysis:
+{', '.join(available_vars[:15])}
+{'...' if len(available_vars) > 15 else ''}
+
+Use 'get_data_dictionary' to see all variables with detailed descriptions.
+"""
+            return [TextContent(type="text", text=error_msg)]
+        
         explore_vars = variables
     else:
         # Auto-select key variables
@@ -599,6 +642,114 @@ Deployment Instructions:
 
 This code can run independently without the MCP server for federated analysis.
 """
+    
+    return [TextContent(type="text", text=result)]
+
+
+async def _get_data_dictionary(arguments: dict) -> List[TextContent]:
+    """Get comprehensive data dictionary with variable information."""
+    if not server_state['datasets']:
+        return [TextContent(type="text", text="No dataset loaded. Use 'import_dataset' first.")]
+    
+    include_stats = arguments.get("include_summary_stats", True)
+    pattern = arguments.get("variable_pattern")
+    
+    # Get merged dataset
+    main_df = server_state['data_loader'].merge_core_tables()
+    
+    # Filter columns by pattern if provided
+    columns = list(main_df.columns)
+    if pattern:
+        import re
+        try:
+            regex = re.compile(pattern, re.IGNORECASE)
+            columns = [col for col in columns if regex.search(col)]
+        except re.error:
+            return [TextContent(type="text", text=f"Invalid regex pattern: {pattern}")]
+    
+    result = f"""Data Dictionary
+{"="*50}
+
+Dataset: {len(server_state['datasets'])} tables, {len(main_df):,} observations
+Variables: {len(columns)} {'(filtered)' if pattern else '(total)'}
+
+"""
+    
+    # Categorize variables
+    categorical_vars = []
+    continuous_vars = []
+    datetime_vars = []
+    id_vars = []
+    
+    for col in columns:
+        if col.endswith('_id') or col == 'patient_id':
+            id_vars.append(col)
+        elif main_df[col].dtype in ['object', 'category', 'bool']:
+            categorical_vars.append(col)
+        elif main_df[col].dtype in ['datetime64[ns]', 'datetime64[ns, UTC]']:
+            datetime_vars.append(col)
+        elif main_df[col].dtype in ['int64', 'float64']:
+            continuous_vars.append(col)
+    
+    # Display by category
+    categories = [
+        ("Identifier Variables", id_vars),
+        ("Categorical Variables", categorical_vars),
+        ("Continuous Variables", continuous_vars),
+        ("Date/Time Variables", datetime_vars)
+    ]
+    
+    for category_name, var_list in categories:
+        if var_list:
+            result += f"{category_name} ({len(var_list)}):\n"
+            result += "-" * (len(category_name) + 10) + "\n"
+            
+            for var in var_list[:20]:  # Limit to first 20 per category
+                var_info = f"• {var}"
+                
+                if include_stats:
+                    if var in categorical_vars:
+                        unique_count = main_df[var].nunique()
+                        missing_pct = (main_df[var].isna().sum() / len(main_df) * 100)
+                        top_values = main_df[var].value_counts().head(3)
+                        var_info += f" ({unique_count} categories, {missing_pct:.1f}% missing)"
+                        if len(top_values) > 0:
+                            top_val = top_values.index[0]
+                            top_count = top_values.iloc[0]
+                            var_info += f" [Most common: {top_val} ({top_count})]"
+                    
+                    elif var in continuous_vars:
+                        missing_pct = (main_df[var].isna().sum() / len(main_df) * 100)
+                        if missing_pct < 100:
+                            mean_val = main_df[var].mean()
+                            std_val = main_df[var].std()
+                            min_val = main_df[var].min()
+                            max_val = main_df[var].max()
+                            var_info += f" (μ={mean_val:.2f}, σ={std_val:.2f}, range=[{min_val:.1f}, {max_val:.1f}], {missing_pct:.1f}% missing)"
+                    
+                    elif var in datetime_vars:
+                        missing_pct = (main_df[var].isna().sum() / len(main_df) * 100)
+                        if missing_pct < 100:
+                            min_date = main_df[var].min()
+                            max_date = main_df[var].max()
+                            var_info += f" (range: {min_date.strftime('%Y-%m-%d')} to {max_date.strftime('%Y-%m-%d')}, {missing_pct:.1f}% missing)"
+                
+                result += f"  {var_info}\n"
+            
+            if len(var_list) > 20:
+                result += f"  ... and {len(var_list) - 20} more variables\n"
+            result += "\n"
+    
+    # Add usage suggestions
+    result += "Usage Suggestions:\n"
+    result += "• Use variable names exactly as shown above in analysis functions\n"
+    result += "• For age calculations, use 'date_of_birth' and calculate age as needed\n"
+    result += "• Comorbidity variables are binary (0/1) indicators\n"
+    result += "• Missing data patterns are shown - consider this in analysis planning\n"
+    
+    if pattern:
+        result += f"\n• Showing variables matching pattern: '{pattern}'\n"
+        result += "• Use get_data_dictionary without pattern to see all variables\n"
     
     return [TextContent(type="text", text=result)]
 
@@ -762,11 +913,16 @@ async def main():
     """Main entry point for the MCP server."""
     parser = argparse.ArgumentParser(description="CableCar Clinical Research MCP Server")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser.add_argument("--data-path", default="./data/synthetic", help="Path to data directory")
     args = parser.parse_args()
     
     # Set up logging
     logging.basicConfig(level=getattr(logging, args.log_level.upper()))
     logger.info("Starting CableCar Clinical Research MCP Server")
+    logger.info(f"Using data path: {args.data_path}")
+    
+    # Store data path in server state for use by tools
+    server_state['default_data_path'] = args.data_path
     
     # Run the MCP server
     async with stdio_server() as (read_stream, write_stream):

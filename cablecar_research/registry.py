@@ -91,9 +91,12 @@ class AnalysisRegistry:
     def _get_plugin_docs(self, plugin_class: Type[BaseAnalysis]) -> Dict[str, str]:
         """Get documentation for a plugin class."""
         try:
-            # Create temporary instance to get documentation
-            temp_instance = plugin_class(None, None)
-            return temp_instance.get_documentation()
+            # Try different initialization patterns
+            temp_instance = self._create_temp_instance(plugin_class)
+            if hasattr(temp_instance, 'get_documentation'):
+                return temp_instance.get_documentation()
+            else:
+                return {'docstring': plugin_class.__doc__ or 'No documentation available'}
         except Exception as e:
             logger.warning(f"Could not generate docs for {plugin_class.__name__}: {e}")
             return {'error': str(e)}
@@ -140,20 +143,31 @@ class AnalysisRegistry:
         """Generate JSON schema for plugin parameters."""
         try:
             # Create temporary instance to get parameter requirements
-            temp_instance = plugin_class(None, None)
+            temp_instance = self._create_temp_instance(plugin_class)
             requirements = temp_instance.get_required_parameters()
             
             properties = {}
             required = []
             
-            # Add required parameters
-            for param_name, param_spec in requirements.get('required', {}).items():
-                properties[param_name] = self._convert_param_to_schema(param_spec)
-                required.append(param_name)
-            
-            # Add optional parameters  
-            for param_name, param_spec in requirements.get('optional', {}).items():
-                properties[param_name] = self._convert_param_to_schema(param_spec)
+            # Handle different return formats
+            if isinstance(requirements, list):
+                # Old format: just a list of required parameter names
+                for param_name in requirements:
+                    properties[param_name] = {
+                        'type': 'string',
+                        'description': f'Required parameter: {param_name}'
+                    }
+                    required.append(param_name)
+            elif isinstance(requirements, dict):
+                # New format: dictionary with required and optional
+                # Add required parameters
+                for param_name, param_spec in requirements.get('required', {}).items():
+                    properties[param_name] = self._convert_param_to_schema(param_spec)
+                    required.append(param_name)
+                
+                # Add optional parameters  
+                for param_name, param_spec in requirements.get('optional', {}).items():
+                    properties[param_name] = self._convert_param_to_schema(param_spec)
             
             # Always include output format option
             properties['output_format'] = {
@@ -302,6 +316,25 @@ class AnalysisRegistry:
             'last_discovery': self._last_discovery.isoformat() if self._last_discovery else None,
             'tools_generated': len(self._tools_cache)
         }
+    
+    def _create_temp_instance(self, plugin_class: Type[BaseAnalysis]):
+        """Create temporary plugin instance trying different initialization patterns."""
+        # Try different initialization patterns
+        init_patterns = [
+            lambda: plugin_class(df=None, privacy_guard=None),  # Full BaseAnalysis signature
+            lambda: plugin_class(privacy_guard=None),           # Privacy guard only
+            lambda: plugin_class(),                             # No arguments
+            lambda: plugin_class(None, None),                   # Positional arguments
+        ]
+        
+        for pattern in init_patterns:
+            try:
+                return pattern()
+            except Exception:
+                continue
+        
+        # If all patterns fail, raise the last exception
+        return plugin_class(df=None, privacy_guard=None)
 
 
 # Global registry instance

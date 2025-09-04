@@ -251,6 +251,91 @@ Usage:
         
         return "\n".join(docs) if docs else "No parameters required."
     
+    def validate_variables_exist(self, variables: List[str], context: str = "analysis") -> Dict[str, Any]:
+        """
+        Validate that requested variables exist in the dataset.
+        
+        Args:
+            variables: List of variable names to validate
+            context: Context description for error messages
+            
+        Returns:
+            Validation result with errors and suggestions
+        """
+        validation = {
+            'valid': True,
+            'errors': [],
+            'suggestions': []
+        }
+        
+        if self.df is None:
+            validation['valid'] = False
+            validation['errors'].append("No data available for validation")
+            return validation
+        
+        missing_vars = [var for var in variables if var not in self.df.columns]
+        if missing_vars:
+            validation['valid'] = False
+            available_vars = list(self.df.columns)
+            
+            # Create helpful error message
+            error_msg = f"Variables not found for {context}: {missing_vars}.\n\n"
+            error_msg += f"Available variables ({len(available_vars)} total):\n"
+            
+            # Categorize available variables
+            categorical_vars = []
+            continuous_vars = []
+            datetime_vars = []
+            id_vars = []
+            
+            for col in available_vars:
+                if col.endswith('_id') or col == 'patient_id':
+                    id_vars.append(col)
+                elif self.df[col].dtype in ['object', 'category', 'bool']:
+                    categorical_vars.append(col)
+                elif self.df[col].dtype in ['datetime64[ns]', 'datetime64[ns, UTC]']:
+                    datetime_vars.append(col)
+                elif self.df[col].dtype in ['int64', 'float64']:
+                    continuous_vars.append(col)
+            
+            if categorical_vars:
+                error_msg += f"  Categorical: {', '.join(categorical_vars[:8])}"
+                error_msg += "..." if len(categorical_vars) > 8 else ""
+                error_msg += "\n"
+            
+            if continuous_vars:
+                error_msg += f"  Continuous: {', '.join(continuous_vars[:8])}"
+                error_msg += "..." if len(continuous_vars) > 8 else ""
+                error_msg += "\n"
+            
+            if datetime_vars:
+                error_msg += f"  Date/Time: {', '.join(datetime_vars[:5])}"
+                error_msg += "..." if len(datetime_vars) > 5 else ""
+                error_msg += "\n"
+            
+            error_msg += "\nUse 'get_data_dictionary' for complete variable descriptions."
+            
+            validation['errors'].append(error_msg)
+            
+            # Generate suggestions for similar variable names
+            import difflib
+            for missing_var in missing_vars:
+                close_matches = difflib.get_close_matches(
+                    missing_var.lower(), 
+                    [var.lower() for var in available_vars], 
+                    n=3, 
+                    cutoff=0.6
+                )
+                if close_matches:
+                    # Find original case for matches
+                    suggestions = []
+                    for match in close_matches:
+                        original_var = next(var for var in available_vars if var.lower() == match)
+                        suggestions.append(original_var)
+                    validation['suggestions'].append(f"'{missing_var}' -> did you mean: {', '.join(suggestions)}?")
+        
+        return validation
+    
     def _generate_example_docs(self) -> str:
         """Generate example documentation."""
         return """

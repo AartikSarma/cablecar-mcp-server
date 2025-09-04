@@ -168,14 +168,14 @@ class TRIPODReporterPlugin(BaseAnalysis):
         }
     )
     
-    def __init__(self, privacy_guard=None):
-        super().__init__(privacy_guard)
+    def __init__(self, df=None, privacy_guard=None, **kwargs):
+        super().__init__(df, privacy_guard, **kwargs)
         
     def validate_inputs(self, df: pd.DataFrame, **kwargs) -> List[str]:
         """Validate inputs for TRIPOD report generation."""
         errors = []
         
-        if df.empty:
+        if self.df is None or self.df.empty:
             errors.append("DataFrame cannot be empty")
             
         # Required parameters
@@ -213,7 +213,7 @@ class TRIPODReporterPlugin(BaseAnalysis):
             if predictor not in df.columns:
                 errors.append(f"Predictor variable '{predictor}' not found in data")
         
-        return errors
+        return {"valid": len(errors) == 0, "errors": errors, "warnings": [], "suggestions": []}
     
     def run_analysis(self, df: pd.DataFrame, **kwargs) -> Dict[str, Any]:
         """Generate TRIPOD-compliant report."""
@@ -293,7 +293,7 @@ class TRIPODReporterPlugin(BaseAnalysis):
         outcome_summary = "Outcome distribution analysis pending"
         if outcome in df.columns:
             if outcome_type == "binary":
-                if df[outcome].dtype == bool or df[outcome].nunique() == 2:
+                if self.df[outcome].dtype == bool or df[outcome].nunique() == 2:
                     outcome_rate = df[outcome].mean() * 100
                     outcome_summary = f"Outcome prevalence: {outcome_rate:.1f}%"
             elif outcome_type == "continuous":
@@ -432,7 +432,7 @@ class TRIPODReporterPlugin(BaseAnalysis):
                 return "Not calculated - outcome not available"
                 
             # For binary outcomes
-            if df[outcome].dtype == bool or df[outcome].nunique() == 2:
+            if self.df[outcome].dtype == bool or df[outcome].nunique() == 2:
                 n_events = df[outcome].sum()
                 n_predictors = len(predictors)
                 epv = n_events / n_predictors if n_predictors > 0 else 0
@@ -532,7 +532,7 @@ class TRIPODReporterPlugin(BaseAnalysis):
             if var not in df.columns:
                 continue
                 
-            if df[var].dtype in ['bool', 'object'] or df[var].nunique() <= 10:
+            if self.df[var].dtype in ['bool', 'object'] or df[var].nunique() <= 10:
                 # Categorical variable
                 value_counts = df[var].value_counts()
                 characteristics[var] = {
@@ -552,7 +552,7 @@ class TRIPODReporterPlugin(BaseAnalysis):
         
         # Add outcome summary
         if outcome in df.columns:
-            if df[outcome].dtype in ['bool', 'object'] or df[outcome].nunique() <= 10:
+            if self.df[outcome].dtype in ['bool', 'object'] or df[outcome].nunique() <= 10:
                 value_counts = df[outcome].value_counts()
                 characteristics[f"{outcome}_outcome"] = {
                     "type": "categorical",

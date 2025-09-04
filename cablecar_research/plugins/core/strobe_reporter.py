@@ -144,14 +144,14 @@ class STROBEReporterPlugin(BaseAnalysis):
         }
     )
     
-    def __init__(self, privacy_guard=None):
-        super().__init__(privacy_guard)
+    def __init__(self, df=None, privacy_guard=None, **kwargs):
+        super().__init__(df, privacy_guard, **kwargs)
         
-    def validate_inputs(self, df: pd.DataFrame, **kwargs) -> List[str]:
+    def validate_inputs(self, **kwargs) -> Dict[str, Any]:
         """Validate inputs for STROBE report generation."""
         errors = []
         
-        if df.empty:
+        if self.df is None or self.df.empty:
             errors.append("DataFrame cannot be empty")
             
         # Required parameters
@@ -186,7 +186,7 @@ class STROBEReporterPlugin(BaseAnalysis):
             if confounder not in df.columns:
                 errors.append(f"Confounder '{confounder}' not found in data")
         
-        return errors
+        return {"valid": len(errors) == 0, "errors": errors, "warnings": [], "suggestions": []}
     
     def run_analysis(self, df: pd.DataFrame, **kwargs) -> Dict[str, Any]:
         """Generate STROBE-compliant report."""
@@ -252,7 +252,7 @@ class STROBEReporterPlugin(BaseAnalysis):
         # Determine outcome type and calculate basic result
         outcome_summary = "Results pending detailed analysis"
         if outcome in df.columns:
-            if df[outcome].dtype in ['bool', 'object'] or df[outcome].nunique() <= 10:
+            if self.df[outcome].dtype in ['bool', 'object'] or df[outcome].nunique() <= 10:
                 # Categorical outcome
                 outcome_counts = df[outcome].value_counts()
                 if len(outcome_counts) >= 2:
@@ -430,7 +430,7 @@ class STROBEReporterPlugin(BaseAnalysis):
         
         # Analyze primary exposure
         if exposure in df.columns:
-            if df[exposure].dtype in ['bool', 'object'] or df[exposure].nunique() <= 10:
+            if self.df[exposure].dtype in ['bool', 'object'] or df[exposure].nunique() <= 10:
                 # Categorical
                 value_counts = df[exposure].value_counts()
                 results[exposure] = {
@@ -450,7 +450,7 @@ class STROBEReporterPlugin(BaseAnalysis):
         
         # Analyze primary outcome
         if outcome in df.columns:
-            if df[outcome].dtype in ['bool', 'object'] or df[outcome].nunique() <= 10:
+            if self.df[outcome].dtype in ['bool', 'object'] or df[outcome].nunique() <= 10:
                 # Categorical
                 value_counts = df[outcome].value_counts()
                 results[outcome] = {
@@ -471,7 +471,7 @@ class STROBEReporterPlugin(BaseAnalysis):
         # Sample confounders (limit to first 5 for brevity)
         for var in confounders[:5]:
             if var in df.columns:
-                if df[var].dtype in ['bool', 'object'] or df[var].nunique() <= 10:
+                if self.df[var].dtype in ['bool', 'object'] or df[var].nunique() <= 10:
                     # Categorical
                     value_counts = df[var].value_counts() 
                     results[var] = {
