@@ -60,7 +60,7 @@ CableCar uses a **modular plugin architecture** that makes it easy to add new an
 ```bash
 # Clone repository
 git clone https://github.com/AartikSarma/cablecar-mcp-server.git
-cd clif_mcp_server
+cd cablecar_mcp_server
 
 # Install dependencies
 pip install -r requirements.txt
@@ -85,9 +85,9 @@ Add to your Claude Desktop MCP settings:
       "CableCar": {
         "command": "python",
         "args": ["-m", "server.main", "--data-path", "./data/synthetic"],
-        "cwd": "/path/to/clif_mcp_server",
+        "cwd": "/path/to/cablecar_mcp_server",
         "env": {
-          "PYTHONPATH": "/path/to/clif_mcp_server"
+          "PYTHONPATH": "/path/to/cablecar_mcp_server"
         }
       }
 }
