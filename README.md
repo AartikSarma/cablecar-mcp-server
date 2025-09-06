@@ -1,6 +1,4 @@
-# CableCar MCP Server
-
-**Connecting AI to Big Longitudinal EMRs for Clinical Analytics and Research**
+# **CableCar: Connecting AI to Big Longitudinal EMRs for Clinical Analytics and Research**
 
 A modular, extensible MCP (Model Context Protocol) server for AI-assisted clinical research with privacy-first design and standards-compliant reporting.
 
@@ -325,28 +323,9 @@ Any CSV-based clinical dataset with automatic schema detection.
 
 ## 🔒 Privacy & Security
 
-### Privacy Protection Levels
-
-**Standard** (default)
-- Minimum cell size: 10
-- Basic PHI removal
-- Audit logging
-
-**High** 
-- Minimum cell size: 20
-- Enhanced data sanitization
-- Detailed access logging
-
-**Maximum**
-- Minimum cell size: 50
-- Differential privacy enabled
-- Comprehensive audit trails
-
 ### Privacy Features
 - **Cell Suppression**: Small counts automatically suppressed
-- **PHI Removal**: Patient identifiers stripped from all outputs  
 - **Aggregate Only**: No individual patient data in results
-- **Audit Trails**: All data access logged for compliance
 - **Local Processing**: All data stays on your system
 
 ## 🌐 Multi-Site Research
