@@ -41,9 +41,6 @@ CableCar uses a **modular plugin architecture** that makes it easy to add new an
 
 🔒 **Privacy-First Design** 
 - Cell suppression for small counts
-- Automatic PHI removal
-- Configurable privacy levels (Standard/High/Maximum)
-- Comprehensive audit trails
 - Local processing - data never leaves your system
 
 📈 **Standards Compliance**
@@ -86,13 +83,15 @@ Add to your Claude Desktop MCP settings:
 
 ```json
 {
-  "mcpServers": {
-    "cablecar": {
-      "command": "python",
-      "args": ["-m", "server.main", "--data-path", "/path/to/your/data"],
-      "cwd": "/path/to/clif_mcp_server"
-    }
-  }
+    "mcpServers": {
+      "CableCar": {
+        "command": "python",
+        "args": ["-m", "server.main", "--data-path", "./data/synthetic"],
+        "cwd": "/path/to/clif_mcp_server",
+        "env": {
+          "PYTHONPATH": "/path/to/clif_mcp_server"
+        }
+      }
 }
 ```
 
