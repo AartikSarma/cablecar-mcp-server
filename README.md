@@ -376,7 +376,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 CableCar is designed specifically for clinical research needs:
 
-- **Regulatory Compliance**: Follows clinical research reporting standards
 - **Privacy by Design**: Built for healthcare data requirements  
 - **Reproducible Research**: Supports open science practices
 - **Multi-Site Studies**: Enables federated research collaborations
