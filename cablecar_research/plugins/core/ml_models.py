@@ -344,17 +344,22 @@ class MLModelsPlugin(BaseAnalysis):
                 model_scores[name] = {'error': str(e)}
         
         # Train best model on full dataset
+        importance_dict = {}
         if best_model:
-            best_model.fit(X_encoded, y)
-            
-            # Get feature importance
-            if hasattr(best_model, 'feature_importances_'):
-                importance_dict = dict(zip(X_encoded.columns, best_model.feature_importances_))
-            elif hasattr(best_model, 'coef_'):
-                importance_dict = dict(zip(X_encoded.columns, np.abs(best_model.coef_).flatten()))
-            else:
+            try:
+                best_model.fit(X_encoded, y)
+
+                # Get feature importance
+                if hasattr(best_model, 'feature_importances_'):
+                    importance_dict = dict(zip(X_encoded.columns, best_model.feature_importances_))
+                elif hasattr(best_model, 'coef_'):
+                    importance_dict = dict(zip(X_encoded.columns, np.abs(best_model.coef_).flatten()))
+                else:
+                    importance_dict = {}
+            except Exception as e:
+                # If feature importance extraction fails, continue with empty dict
                 importance_dict = {}
-        
+
         results = {
             'best_model_name': best_model_name,
             'best_cv_score': best_score,

@@ -93,26 +93,26 @@ class SensitivityAnalysisPlugin(BaseAnalysis):
     def __init__(self, df=None, privacy_guard=None, **kwargs):
         super().__init__(df, privacy_guard, **kwargs)
         
-    def validate_inputs(self, df: pd.DataFrame, **kwargs) -> List[str]:
+    def validate_inputs(self, **kwargs) -> Dict[str, Any]:
         """Validate inputs for sensitivity analysis."""
         errors = []
-        
+
         if self.df is None or self.df.empty:
             errors.append("DataFrame cannot be empty")
             
         outcome_column = kwargs.get('outcome_column')
         if not outcome_column:
             errors.append("outcome_column is required")
-        elif outcome_column not in df.columns:
+        elif outcome_column not in self.df.columns:
             errors.append(f"Outcome column '{outcome_column}' not found in data")
-            
+
         exposure_column = kwargs.get('exposure_column')
-        if exposure_column and exposure_column not in df.columns:
+        if exposure_column and exposure_column not in self.df.columns:
             errors.append(f"Exposure column '{exposure_column}' not found in data")
-            
+
         covariate_columns = kwargs.get('covariate_columns', [])
         for col in covariate_columns:
-            if col not in df.columns:
+            if col not in self.df.columns:
                 errors.append(f"Covariate column '{col}' not found in data")
                 
         primary_results = kwargs.get('primary_results')
@@ -121,9 +121,12 @@ class SensitivityAnalysisPlugin(BaseAnalysis):
             
         return {"valid": len(errors) == 0, "errors": errors, "warnings": [], "suggestions": []}
     
-    def run_analysis(self, df: pd.DataFrame, **kwargs) -> Dict[str, Any]:
+    def run_analysis(self, **kwargs) -> Dict[str, Any]:
         """Run comprehensive sensitivity analysis."""
-        
+
+        # Use instance dataframe
+        df = self.df
+
         outcome_column = kwargs['outcome_column']
         exposure_column = kwargs.get('exposure_column')
         covariate_columns = kwargs.get('covariate_columns', [])

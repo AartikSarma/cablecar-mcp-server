@@ -171,53 +171,57 @@ class TRIPODReporterPlugin(BaseAnalysis):
     def __init__(self, df=None, privacy_guard=None, **kwargs):
         super().__init__(df, privacy_guard, **kwargs)
         
-    def validate_inputs(self, df: pd.DataFrame, **kwargs) -> List[str]:
+    def validate_inputs(self, **kwargs) -> Dict[str, Any]:
         """Validate inputs for TRIPOD report generation."""
         errors = []
-        
+
         if self.df is None or self.df.empty:
             errors.append("DataFrame cannot be empty")
-            
+
         # Required parameters
-        required_params = ["study_type", "model_title", "study_objective", 
-                          "intended_use", "outcome_variable", "outcome_type", 
+        required_params = ["study_type", "model_title", "study_objective",
+                          "intended_use", "outcome_variable", "outcome_type",
                           "predictor_variables", "model_type"]
-        
+
         for param in required_params:
             if not kwargs.get(param):
                 errors.append(f"{param} is required for TRIPOD report")
-        
+
         # Validate study type
         study_type = kwargs.get("study_type")
         if study_type and study_type not in ["development", "external_validation", "development_and_validation"]:
             errors.append("study_type must be one of: development, external_validation, development_and_validation")
-        
+
         # Validate outcome type
         outcome_type = kwargs.get("outcome_type")
         if outcome_type and outcome_type not in ["binary", "survival", "continuous", "ordinal"]:
             errors.append("outcome_type must be one of: binary, survival, continuous, ordinal")
-            
+
         # Validate model type
         model_type = kwargs.get("model_type")
         valid_model_types = ["logistic_regression", "cox_regression", "machine_learning", "neural_network", "ensemble"]
         if model_type and model_type not in valid_model_types:
             errors.append(f"model_type must be one of: {', '.join(valid_model_types)}")
-        
+
         # Validate that specified variables exist in data
         outcome_variable = kwargs.get("outcome_variable")
-        if outcome_variable and outcome_variable not in df.columns:
+        if outcome_variable and outcome_variable not in self.df.columns:
             errors.append(f"Outcome variable '{outcome_variable}' not found in data")
-            
+
         predictor_variables = kwargs.get("predictor_variables", [])
         for predictor in predictor_variables:
-            if predictor not in df.columns:
+            if predictor not in self.df.columns:
                 errors.append(f"Predictor variable '{predictor}' not found in data")
-        
+
         return {"valid": len(errors) == 0, "errors": errors, "warnings": [], "suggestions": []}
     
-    def run_analysis(self, df: pd.DataFrame, **kwargs) -> Dict[str, Any]:
+    def run_analysis(self, **kwargs) -> Dict[str, Any]:
         """Generate TRIPOD-compliant report."""
-        
+
+        # Use instance dataframe
+        df = self.df
+
+
         # Extract parameters
         study_type = kwargs["study_type"]
         model_title = kwargs["model_title"] 

@@ -169,28 +169,31 @@ class STROBEReporterPlugin(BaseAnalysis):
         
         # Validate that specified variables exist in data
         primary_exposure = kwargs.get("primary_exposure")
-        if primary_exposure and primary_exposure not in df.columns:
+        if primary_exposure and primary_exposure not in self.df.columns:
             errors.append(f"Primary exposure '{primary_exposure}' not found in data")
-            
-        primary_outcome = kwargs.get("primary_outcome") 
-        if primary_outcome and primary_outcome not in df.columns:
+
+        primary_outcome = kwargs.get("primary_outcome")
+        if primary_outcome and primary_outcome not in self.df.columns:
             errors.append(f"Primary outcome '{primary_outcome}' not found in data")
-            
+
         secondary_outcomes = kwargs.get("secondary_outcomes", [])
         for outcome in secondary_outcomes:
-            if outcome not in df.columns:
+            if outcome not in self.df.columns:
                 errors.append(f"Secondary outcome '{outcome}' not found in data")
-                
+
         confounders = kwargs.get("confounders", [])
         for confounder in confounders:
-            if confounder not in df.columns:
+            if confounder not in self.df.columns:
                 errors.append(f"Confounder '{confounder}' not found in data")
         
         return {"valid": len(errors) == 0, "errors": errors, "warnings": [], "suggestions": []}
     
-    def run_analysis(self, df: pd.DataFrame, **kwargs) -> Dict[str, Any]:
+    def run_analysis(self, **kwargs) -> Dict[str, Any]:
         """Generate STROBE-compliant report."""
-        
+
+        # Use instance dataframe
+        df = self.df
+
         # Extract parameters
         study_design = kwargs["study_design"]
         study_title = kwargs["study_title"]
