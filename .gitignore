@@ -1,6 +1,16 @@
 # Claude-specific files
 CLAUDE.md
 
+# Data - never commit patient data
+data/
+*.csv
+*.parquet
+*.fst
+
+# Environment
+.env
+.env.*
+
 # Python
 __pycache__/
 *.py[cod]
@@ -8,27 +18,14 @@ __pycache__/
 *.so
 .Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
+.eggs/
 *.egg
-MANIFEST
 
-# Virtual environments
+# UV / Virtual environments
+.venv/
 venv/
-ENV/
-env/
-.venv
 
 # IDE
 .vscode/
@@ -41,32 +38,20 @@ env/
 .DS_Store
 Thumbs.db
 
-# Project specific
-data/
-*.log
-.env
-.env.local
-
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb_checkpoints
-
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
-.tox/
-.hypothesis/
 
-# Generated files
-generated_analysis.py
+# Audit logs (may contain sensitive metadata)
+audit/
+*.audit.jsonl
+
+# Jupyter
+.ipynb_checkpoints/
 
 # Archives
-*.zip
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.rar
-*.7z
 archive/
-archives/
+
+# Generated
+*.log

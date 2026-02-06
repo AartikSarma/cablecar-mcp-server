@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cablecar": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "cablecar.server.main", "--data-path", "./data/synthetic"]
+    }
+  }
+}

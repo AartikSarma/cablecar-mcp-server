@@ -1,386 +1,368 @@
-# **CableCar: Connecting AI to Big Longitudinal EMRs for Clinical Analytics and Research**
+# CableCar v2: AI-Powered Clinical Research Platform
 
-A modular, extensible MCP (Model Context Protocol) server for AI-assisted clinical research with privacy-first design and standards-compliant reporting.
+**Connecting AI to Big Longitudinal EMRs for Clinical Analytics and Research**
 
-## 🌟 Overview
+A hybrid architecture combining a minimal MCP data server (privacy boundary) with Claude Code native tools (skills, subagents, hooks) for AI-assisted clinical research that is privacy-first, reproducible, and standards-compliant.
 
-CableCar enables clinical researchers to:
-- **Import & analyze** clinical datasets with automatic schema validation
-- **Build patient cohorts** using complex clinical criteria  
-- **Perform statistical analyses** with comprehensive privacy protection
-- **Generate publication-ready reports** following STROBE/TRIPOD+AI standards
-- **Export reproducible code** for federated multi-site validation
-- **Extend functionality** with community-contributed analysis plugins
+## Overview
 
-## 🏗️ Architecture
+CableCar enables clinical researchers to develop and study research questions with AI assistance while ensuring patient data never leaves the local environment. The platform supports the full research lifecycle: study design, cohort building, statistical analysis, causal reasoning, code generation, and publication reporting.
 
-CableCar uses a **modular plugin architecture** that makes it easy to add new analysis capabilities:
+### Key Capabilities
+
+- **Privacy-first architecture** -- raw patient data exists only in the server process; all outputs pass through PrivacyGuard before reaching the AI
+- **Causal reasoning framework** -- DAG construction, backdoor criterion, collider bias detection, minimal adjustment sets
+- **Full statistical suite** -- descriptive, hypothesis testing, logistic/linear/Cox regression, prediction models, survival analysis, subgroup analysis, sensitivity analysis
+- **Reproducible code generation** -- Jinja2-templated Python and R (tidyverse) scripts that run at any CLIF site without modification
+- **Standards-compliant reporting** -- STROBE (22 items) and TRIPOD+AI checklists with auto-population from analysis provenance
+- **AI evaluation framework** -- benchmark scenarios with ground-truth effects for testing AI clinical reasoning capabilities
+
+## Architecture
 
 ```
-📁 cablecar_research/
-├── 🧩 plugins/
-│   ├── core/           # Built-in analyses (descriptive stats, regression)
-│   ├── community/      # Community contributions 
-│   └── contrib/        # Experimental analyses
-├── 🔒 privacy/         # Privacy protection & data sanitization
-├── 📊 reporting/       # STROBE/TRIPOD+AI compliant reports
-└── 🔧 registry.py     # Dynamic plugin discovery & MCP integration
++--------------------------------------------------------------+
+|  CLAUDE'S CONTEXT (Anthropic API)                            |
+|                                                              |
+|  Skills (/new-study, /dag, /table1, /regression, etc.)       |
+|  Subagents (statistical-reviewer, causal-advisor, etc.)      |
+|  ↕ Only sanitized aggregates, never raw data                 |
+|  +========================================================+  |
+|  ‖  Minimal Data Server (MCP, 4 tools)                    ‖  |
+|  ‖  - get_schema()                                        ‖  |
+|  ‖  - load_data(path, schema)                             ‖  |
+|  ‖  - query_cohort(criteria)                              ‖  |
+|  ‖  - execute_analysis(code)                              ‖  |
+|  ‖  ALL outputs pass through PrivacyGuard                 ‖  |
+|  +========================================================+  |
++---------------------------+----------------------------------+
+                            | Only sanitized results cross
+                            v
++--------------------------------------------------------------+
+|  LOCAL MACHINE                                               |
+|  Data Server Process (holds data in memory)                  |
+|  ├── Raw data files (CSV/Parquet) loaded into memory         |
+|  ├── PrivacyGuard filters ALL output before returning        |
+|  ├── Analysis library executes locally                       |
+|  └── Cohort/DataStore with caching                           |
+|                                                              |
+|  PreToolUse hooks block Read/Grep/Bash on data directory     |
++--------------------------------------------------------------+
 ```
 
-### Key Features
+| Layer | Implementation | Purpose |
+|-------|---------------|---------|
+| Privacy Boundary | Minimal Data Server (MCP, 4 tools) | Only interface to raw data; all output sanitized |
+| User Interface | Skills (15 slash commands) | Research workflow steps; never touch raw data |
+| Specialized AI | Subagents (5 agents) | Statistical review, causal reasoning, code generation |
+| Safety Enforcement | Hooks (2 shell scripts) | Block direct data access, audit logging |
 
-🔌 **Unified Plugin Architecture** *(New!)*
-- All analysis functions implemented as modular plugins
-- Single source of truth - no code duplication
-- Automatic plugin discovery and loading  
-- Standardized analysis interface with validation
-- Dynamic MCP tool generation with full metadata
-- Hot-pluggable extensions without server restart
+### Why This Architecture
 
-🔒 **Privacy-First Design** 
-- Cell suppression for small counts
-- Local processing - data never leaves your system
+The v1 prototype had 20+ MCP tools consuming significant context. v2 uses exactly 4 MCP tools with simple interfaces. All intelligence (study design, causal reasoning, statistical review, code generation) lives in skills and subagents, which consume zero context until invoked.
 
-📈 **Standards Compliance**
-- **STROBE reporting** for observational studies
-- **TRIPOD+AI** for prediction models with ML interpretability
-- Publication-ready outputs with checklists
-- Comprehensive sensitivity analysis support
+## Project Structure
 
-🌐 **Multi-Site Ready**
-- Generates portable analysis code (Python/R)
-- Federated research support with Docker containers
-- No patient data sharing required
-- Identical analysis execution across sites
+```
+cablecar/
+├── server/                    # Minimal MCP Data Server (4 tools)
+│   ├── main.py                # Server entry point
+│   └── tools.py               # get_schema, load_data, query_cohort, execute_analysis
+├── schema/                    # Flexible schema system
+│   ├── base.py                # SchemaDefinition, TableSpec, ColumnSpec
+│   ├── clif.py                # CLIF v2.1.0 complete schema
+│   ├── registry.py            # Schema registry + auto-inference
+│   └── validator.py           # Structural + type validation
+├── data/                      # Data layer (runs inside server process)
+│   ├── loader.py              # CSV/Parquet auto-detection
+│   ├── store.py               # In-memory DataStore with caching
+│   ├── cohort.py              # CohortBuilder + Cohort (architectural linchpin)
+│   ├── transforms.py          # Derived variables (mortality, LOS, etc.)
+│   └── temporal.py            # Time-series feature extraction
+├── analysis/                  # Statistical analysis library
+│   ├── base.py                # BaseAnalysis ABC + AnalysisResult
+│   ├── descriptive.py         # Table 1, distributions, SMD
+│   ├── hypothesis.py          # Group comparisons, multiple testing correction
+│   ├── regression.py          # Linear, logistic, Cox PH
+│   ├── prediction.py          # ML models, cross-validation
+│   ├── survival.py            # Kaplan-Meier, competing risks
+│   ├── causal.py              # DAG, backdoor criterion, adjustment sets
+│   ├── subgroup.py            # Efficient subgroup engine + interaction tests
+│   └── sensitivity.py         # Missing data, outlier, definition sensitivity
+├── privacy/                   # Privacy and compliance
+│   ├── guard.py               # PrivacyGuard (cell suppression, PHI redaction)
+│   ├── phi_detector.py        # PHI detection (SSN, MRN, email, phone, DOB, IP)
+│   ├── audit.py               # Persistent JSONL audit trail
+│   └── policy.py              # Configurable PrivacyPolicy
+├── codegen/                   # Reproducible code generation
+│   ├── engine.py              # Jinja2-based CodeGenerator
+│   ├── provenance.py          # AnalysisProvenance tracking
+│   └── templates/             # Python (*.py.j2) and R (*.R.j2) templates
+├── reporting/                 # Publication reporting
+│   ├── strobe.py              # STROBE 22-item checklist
+│   └── tripod.py              # TRIPOD+AI checklist
+├── workflow/                  # Research workflow orchestration
+│   ├── pipeline.py            # AnalysisPipeline (step chaining)
+│   ├── state.py               # Immutable WorkflowState snapshots
+│   ├── plan.py                # StudyPlan (PICO + causal framework)
+│   └── cache.py               # ComputationCache
+└── evaluation/                # AI capability evaluation
+    ├── scenarios.py           # 6 ground-truth clinical scenarios
+    ├── graders.py             # 4-dimension output scoring
+    └── benchmarks.py          # Benchmark suite runner
 
-## 🚀 Quick Start
+.claude/
+├── commands/                  # 15 skills (slash commands)
+│   ├── new-study.md           # /new-study - PICO framework + study design
+│   ├── load-data.md           # /load-data - Import + validate dataset
+│   ├── define-cohort.md       # /define-cohort - Inclusion/exclusion criteria
+│   ├── data-dictionary.md     # /data-dictionary - Explore schema
+│   ├── dag.md                 # /dag - Build causal DAG
+│   ├── table1.md              # /table1 - Baseline characteristics
+│   ├── analyze.md             # /analyze - General analysis dispatch
+│   ├── hypothesis.md          # /hypothesis - Statistical testing
+│   ├── regression.md          # /regression - Regression models
+│   ├── predict.md             # /predict - ML prediction models
+│   ├── subgroup.md            # /subgroup - Subgroup analysis
+│   ├── sensitivity.md         # /sensitivity - Sensitivity analyses
+│   ├── export-code.md         # /export-code - Generate Python/R scripts
+│   ├── report.md              # /report - STROBE/TRIPOD reports
+│   └── privacy-check.md       # /privacy-check - Audit compliance
+├── agents/                    # 5 subagents
+│   ├── causal-advisor.md      # Guides DAG construction and causal reasoning
+│   ├── statistical-reviewer.md # Validates analysis choices and assumptions
+│   ├── code-generator.md      # Generates Python/R from templates
+│   ├── clinical-evaluator.md  # Evaluates AI research capabilities
+│   └── cablecar-clinical-evaluator.md
+└── hooks/
+    ├── block-data-access.sh   # PreToolUse: blocks Read/Grep/Bash on data/
+    └── audit-logger.sh        # PostToolUse: logs all data operations
+
+tests/
+├── conftest.py                # Shared fixtures (mini schema, synthetic data, cohort)
+├── unit/                      # 170 unit tests across 9 test files
+│   ├── test_schema.py         # Schema types, validation, registry
+│   ├── test_privacy.py        # PrivacyGuard, PHI detection, audit
+│   ├── test_data.py           # Loader, store, cohort builder, subgroups
+│   ├── test_analysis.py       # Descriptive, hypothesis, regression
+│   ├── test_causal.py         # CausalDAG, adjustment sets, collider detection
+│   ├── test_codegen.py        # Python/R code generation, provenance
+│   ├── test_reporting.py      # STROBE and TRIPOD+AI reports
+│   ├── test_workflow.py       # Pipeline, state, cache
+│   └── test_evaluation.py     # Scenarios, graders, benchmarks
+└── integration/               # 10 integration tests
+    ├── test_pipeline.py       # End-to-end workflow
+    └── test_privacy_boundary.py # PHI never leaks through any path
+```
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- [UV](https://docs.astral.sh/uv/) package manager
 
 ### Installation
 
 ```bash
-# Clone repository
 git clone https://github.com/AartikSarma/cablecar-mcp-server.git
-cd cablecar_mcp_server
+cd cablecar-mcp-server
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Generate synthetic test data
-python synthetic_data/clif_generator.py
+# Install dependencies with UV
+uv sync --dev
 ```
 
-### Start the MCP Server
+### Synthetic Data
+
+CableCar uses synthetic CLIF data (8,000 patients, 10,000 hospitalizations, 28 tables) from [synthetic_clif](https://github.com/AartikSarma/synthetic_clif):
 
 ```bash
-python -m server.main --data-path ./data/synthetic
+# Clone and copy synthetic data
+git clone https://github.com/AartikSarma/synthetic_clif.git /tmp/synthetic_clif
+cp /tmp/synthetic_clif/synth_clif_10k/*.parquet data/synthetic/
 ```
 
-### Claude Desktop Configuration
+### Run Tests
 
-Add to your Claude Desktop MCP settings:
+```bash
+uv run pytest tests/ -v
+```
+
+190 tests, all passing (unit + integration).
+
+### Claude Code Configuration
+
+Add to `.claude/settings.local.json`:
 
 ```json
 {
-    "mcpServers": {
-      "CableCar": {
-        "command": "python",
-        "args": ["-m", "server.main", "--data-path", "./data/synthetic"],
-        "cwd": "/path/to/cablecar_mcp_server",
-        "env": {
-          "PYTHONPATH": "/path/to/cablecar_mcp_server"
-        }
-      }
+  "mcpServers": {
+    "cablecar": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "cablecar.server.main", "--data-path", "./data/synthetic"]
+    }
+  }
 }
 ```
 
-## 📊 Available Analysis Tools
+## Usage
 
-### Core System Tools (7)
-- `import_dataset` - Load and validate clinical datasets with schema checking
-- `design_study` - Interactive study design wizard with methodological guidance
-- `explore_data` - Comprehensive data exploration with privacy-safe summaries
-- `export_analysis_code` - Generate complete, reproducible analysis code for multi-site validation
-- `get_analysis_summary` - Get summary of all analyses performed in current session
-- `get_privacy_report` - Generate comprehensive privacy compliance report
-- `list_available_plugins` - List all available analysis plugins and their capabilities
+### Research Workflow
 
-### Analysis Plugins (9)
-All analysis functions are now implemented as modular plugins with standardized interfaces:
+```
+/new-study   What factors are associated with mortality in ICU sepsis patients?
+             -> PICO framework, study design guidance, causal-advisor builds DAG
 
-**📊 Descriptive & Exploratory**
-- `run_descriptive_statistics` - Publication-ready Table 1 with statistical tests and stratification
-- `run_exploratory_data_analysis` - Comprehensive EDA with data quality, distributions, correlations, outliers
+/load-data   ./data/hospital_x/
+             -> Validates against CLIF schema, privacy-filtered summary
 
-**🔬 Statistical Testing & Modeling**  
-- `run_hypothesis_testing` - Comprehensive statistical hypothesis testing with multiple comparison corrections
-- `run_regression_analysis` - Linear, logistic, and Cox regression with diagnostics and validation
-- `run_ml_models` - AutoML with validation, interpretability, and TRIPOD+AI compliance
+/define-cohort  Adult ICU patients with sepsis
+             -> CONSORT flow diagram: 10,000 -> 9,669 adults -> ...
 
-**🎯 Specialized Analyses**
-- `run_propensity_score_matching` - Propensity score matching for causal inference
-- `run_sensitivity_analysis` - Robustness testing for missing data, outliers, definitions, and subgroups
+/table1      --stratify-by mortality
+             -> Baseline characteristics, all cells >= 10
 
-**📝 Standards-Compliant Reporting**
-- `run_strobe_reporter` - STROBE-compliant reports for observational studies  
-- `run_tripod_reporter` - TRIPOD+AI compliant reports for prediction model studies
+/regression  logistic mortality ~ age + sofa + lactate + ventilation
+             -> statistical-reviewer validates, reports ORs, CIs, assumptions
 
-*All plugins are automatically discovered and available as MCP tools with full metadata and validation*
+/subgroup    age_group
+             -> Filters parent cohort (no reload), forest plot + interaction test
 
-## 🔧 Usage Examples
+/export-code python
+/export-code r
+             -> Jinja2 templates produce complete, runnable scripts
 
-### Basic Data Analysis Workflow
-
-```python
-# 1. Import your clinical dataset
-import_dataset(
-    data_path="/path/to/clinical/data",
-    data_format="clif",
-    privacy_level="standard"
-)
-
-# 2. Design your study approach
-design_study(
-    research_question="Does early antibiotic therapy improve outcomes?",
-    study_type="analytical"
-)
-
-# 3. Generate baseline characteristics table
-run_descriptive_statistics(
-    variables=["age", "sex", "comorbidities", "severity_score"],
-    stratify_by="antibiotic_timing",
-    output_format="publication"
-)
-
-# 4. Test your hypothesis  
-run_hypothesis_testing(
-    outcome_variables=["mortality", "length_of_stay"],
-    group_variable="antibiotic_timing",
-    correction_method="fdr_bh"
-)
-
-# 5. Generate publication report
-run_strobe_reporter(
-    study_design="cohort",
-    study_title="Early Antibiotic Therapy and Clinical Outcomes",
-    study_objective="To assess the impact of early antibiotic therapy on patient outcomes",
-    primary_exposure="antibiotic_timing",
-    primary_outcome="mortality",
-    include_checklist=true
-)
-
-# 6. Export code for multi-site validation
-export_analysis_code(
-    language="python",
-    include_all_analyses=true
-)
+/report      strobe
+             -> All 22 STROBE items auto-populated from provenance chain
 ```
 
-### Advanced Analysis with Plugins
+### Key API Examples
 
 ```python
-# Comprehensive exploratory data analysis
-run_exploratory_data_analysis(
-    target_variable="mortality",
-    include_correlations=true,
-    include_distributions=true,
-    include_outlier_detection=true
+from cablecar.data.store import DataStore
+from cablecar.data.cohort import CohortBuilder, CohortDefinition
+from cablecar.analysis.descriptive import DescriptiveAnalysis
+from cablecar.analysis.regression import RegressionAnalysis
+from cablecar.analysis.causal import CausalDAG
+from cablecar.privacy.guard import PrivacyGuard
+
+# Load data
+store = DataStore()
+store.load("./data/synthetic")
+
+# Build cohort
+cohort = CohortBuilder(store).build(CohortDefinition(
+    name="adults",
+    inclusion_criteria=[{"column": "age_at_admission", "op": ">=", "value": 18}],
+))
+
+# Descriptive analysis (Table 1)
+table1 = DescriptiveAnalysis(cohort).run(
+    variables=["age_at_admission", "hospital_mortality"],
+    stratify_by="discharge_category",
 )
 
-# Propensity score matching for causal inference
-run_propensity_score_matching(
-    treatment_variable="antibiotic_timing",
-    outcome_variables=["mortality", "length_of_stay"], 
-    matching_variables=["age", "sex", "severity_score"],
-    matching_ratio=1,
-    output_format="detailed"
+# Causal DAG
+dag = (CausalDAG("mortality_study")
+    .add_variable("treatment", role="exposure")
+    .add_variable("mortality", role="outcome")
+    .add_variable("severity", role="confounder")
+    .add_edge("severity", "treatment")
+    .add_edge("severity", "mortality")
+    .add_edge("treatment", "mortality"))
+adjustment_set = dag.get_minimal_adjustment_set()  # {"severity"}
+
+# Regression with confounders from DAG
+result = RegressionAnalysis(cohort).run(
+    outcome="hospital_mortality",
+    predictors=["age_at_admission"],
+    confounders=list(adjustment_set),
+    model_type="logistic",
 )
 
-# Sensitivity analysis for robustness testing
-run_sensitivity_analysis(
-    primary_results=previous_analysis_results,
-    outcome_column="mortality",
-    missing_data_methods=["complete_case", "multiple_imputation"],
-    outlier_methods=["iqr", "isolation_forest"],
-    sensitivity_threshold=0.2
-)
-
-# Generate TRIPOD+AI compliant prediction model report
-run_tripod_reporter(
-    study_type="development_and_validation",
-    model_title="ICU Mortality Prediction Model",
-    study_objective="Develop and validate a model to predict ICU mortality",
-    intended_use="Clinical decision support for ICU risk stratification",
-    outcome_variable="mortality",
-    outcome_type="binary",
-    predictor_variables=["age", "severity_score", "comorbidities"],
-    model_type="machine_learning"
-)
+# Privacy: sanitize before any output reaches an LLM
+safe = PrivacyGuard().sanitize_for_llm(result.to_dict())
+# safe["sanitized"] == True, small cells suppressed, PHI redacted
 ```
 
-## 🧩 Extending CableCar: Plugin Development
+## Privacy Guarantee
 
-### Create a New Plugin
+Raw patient data exists **only** in the data server's process memory. PHI cannot reach Anthropic's API through three layers of defense:
 
-Generate a plugin template in seconds:
+1. **PrivacyGuard** -- every server tool output passes through `sanitize_for_llm()` which applies cell suppression (counts < 10), PHI redaction (SSN, MRN, email, phone, DOB, IP), and audit logging
+2. **PreToolUse hooks** -- `block-data-access.sh` blocks Claude from using Read/Grep/Bash to access the `data/` directory directly
+3. **Architecture** -- analysis code runs inside the server process on raw data, but only returns sanitized coefficients, p-values, and aggregated statistics
+
+## Causal Reasoning
+
+The `CausalDAG` class (entirely new in v2) guides researchers through rigorous causal analysis:
+
+- **Variable roles**: exposure, outcome, confounder, mediator, collider, instrument
+- **Minimal adjustment set** via the backdoor criterion
+- **Collider bias warnings** -- alerts when conditioning on a collider would induce spurious associations
+- **Cycle detection** -- prevents invalid DAG structures
+- **Mermaid diagram export** for visualization in markdown
+
+The `/dag` skill and `causal-advisor` subagent walk researchers through DAG construction interactively.
+
+## Code Generation
+
+Generates complete, runnable analysis scripts using Jinja2 templates:
+
+- **Python**: pandas, scipy, statsmodels, lifelines, scikit-learn
+- **R**: tidyverse (dplyr, ggplot2, broom, tidyr), survival, survminer
+
+Generated code works at **any site** with CLIF-formatted data without modification, enabling federated multi-site research.
+
+## Evaluation Framework
+
+Six benchmark scenarios with known ground-truth effects for testing AI clinical reasoning:
+
+| Scenario | Difficulty | Domain | Ground Truth |
+|----------|-----------|--------|-------------|
+| Age-mortality association | Easy | General | Linear increase embedded in data |
+| Severity-vasopressor relationship | Easy | General | 90% vs 30% probability |
+| Ventilation-LOS (confounded) | Medium | Causal | Severity confounds both |
+| Lactate mortality prediction | Medium | Prediction | AUROC 0.55-0.75 expected |
+| Confounding by indication | Hard | Causal | Unadjusted association is misleading |
+| Age-severity interaction | Hard | General | Both independently affect mortality |
+
+Grading across 4 dimensions: method appropriateness, statistical correctness, causal reasoning, and completeness.
+
+## Data Format
+
+CableCar supports the [CLIF v2.1.0](https://clif-consortium.github.io/website/) schema with 28 tables:
+
+**Core tables**: patient, hospitalization, ADT, vitals, labs, respiratory_support, medication_admin_continuous, patient_assessments
+
+**Additional tables**: procedures, dialysis, intake_output, position, microbiology, sensitivity, ecg, imaging, provider, diagnosis, billing, surgery, transfusion, therapy, nutrition, line_list, code_status, and more.
+
+CSV and Parquet formats are auto-detected. Custom schemas can be registered via `SchemaRegistry`.
+
+## Development
 
 ```bash
-python scripts/generate_plugin_template.py \
-    --name "survival_analysis" \
-    --type "inferential" \
-    --author "Dr. Jane Smith" \
-    --description "Cox proportional hazards survival analysis"
+# Install with dev dependencies
+uv sync --dev
+
+# Run full test suite
+uv run pytest tests/ -v
+
+# Run with coverage
+uv run pytest tests/ --cov=cablecar --cov-report=term-missing
 ```
 
-This creates:
-- Plugin code with standardized interface
-- Comprehensive test suite  
-- Complete documentation template
+### Dependencies
 
-### Plugin Structure
+Managed via UV (`pyproject.toml`):
 
-Every plugin implements the `BaseAnalysis` interface:
+- pandas, numpy, scipy, scikit-learn, statsmodels, lifelines
+- networkx (causal DAGs), pydantic (schema types), jinja2 (code generation)
+- pyarrow (Parquet support), mcp (Model Context Protocol)
 
-```python
-from cablecar_research.analysis.base import BaseAnalysis, AnalysisMetadata, AnalysisType
+## License
 
-class SurvivalAnalysisPlugin(BaseAnalysis):
-    metadata = AnalysisMetadata(
-        name="survival_analysis",
-        display_name="Survival Analysis", 
-        description="Cox proportional hazards survival analysis with comprehensive diagnostics",
-        analysis_type=AnalysisType.INFERENTIAL,
-        required_columns=["time", "event"],
-        optional_columns=["covariates"],
-        parameters={
-            "time_column": {
-                "type": "string",
-                "description": "Time to event or censoring column",
-                "required": True
-            },
-            "event_column": {
-                "type": "string", 
-                "description": "Binary event indicator column",
-                "required": True
-            },
-            "covariate_columns": {
-                "type": "list",
-                "description": "List of covariate columns for Cox model",
-                "required": False,
-                "default": []
-            }
-        }
-    )
-    
-    def validate_inputs(self, df: pd.DataFrame, **kwargs) -> List[str]:
-        """Validate analysis inputs - returns list of error messages"""
-        errors = []
-        if 'time_column' not in kwargs:
-            errors.append("time_column is required")
-        # ... additional validation
-        return errors
-        
-    def run_analysis(self, df: pd.DataFrame, **kwargs) -> Dict[str, Any]:
-        """Execute the survival analysis"""
-        time_col = kwargs['time_column']
-        event_col = kwargs['event_column']
-        # ... analysis implementation
-        return results
-        
-    def format_results(self, results: Dict[str, Any]) -> str:
-        """Format results for display"""
-        # ... formatting implementation
-        return formatted_output
-        
-    def get_required_parameters(self) -> List[str]:
-        """Get list of required parameters"""
-        return ["time_column", "event_column"]
-```
-
-Your plugin is automatically:
-- Discovered by the registry
-- Available as `run_survival_analysis` MCP tool
-- Integrated with privacy protection
-- Documented and tested
-
-## 📁 Data Formats
-
-CableCar supports multiple clinical data formats:
-
-### CLIF (Common Longitudinal ICU Format)
-Standard format for ICU research data:
-```
-data/
-├── patient.csv                    # Demographics, outcomes
-├── hospitalization.csv            # Admission/discharge
-├── vitals.csv                     # Vital signs  
-├── labs.csv                       # Laboratory values
-├── respiratory_support.csv        # Ventilation data
-└── medication_administration.csv  # Medications
-```
-
-### Custom Clinical Datasets
-Any CSV-based clinical dataset with automatic schema detection.
-
-## 🔒 Privacy & Security
-
-### Privacy Features
-- **Cell Suppression**: Small counts automatically suppressed
-- **Aggregate Only**: No individual patient data in results
-- **Local Processing**: All data stays on your system
-
-## 🌐 Multi-Site Research
-
-Generate analysis code that runs identically across clinical sites:
-
-1. **Develop Analysis**: Use CableCar to develop your analysis locally
-2. **Export Code**: Generate standalone Python/R scripts  
-3. **Distribute**: Share code (no patient data) with collaborating sites
-4. **Execute**: Each site runs identical analysis on their local data
-5. **Aggregate**: Combine summary statistics for multi-site results
-
-```python
-# Generated code runs independently of CableCar
-export_analysis_code(
-    language="python",
-    containerize=true,  # Includes Docker setup
-    include_all_analyses=true
-)
-```
-
-## 🤝 Contributing
-
-We welcome contributions! CableCar's modular architecture makes it easy to add new analyses.
-
-### Ways to Contribute
-- **Analysis Plugins**: Add new statistical methods or clinical analyses
-- **Documentation**: Improve guides and examples
-- **Testing**: Enhance test coverage
-- **Bug Fixes**: Fix issues and improve reliability
-
-### Getting Started
-1. Read our [Contributing Guidelines](CONTRIBUTING.md)
-2. Check the [Plugin Development Guide](docs/plugin-development-guide.md)
-3. Browse existing [plugins](cablecar_research/plugins/) for examples
-4. Use the template generator to create new plugins
-
-### Community
-- 📋 **Issues**: [GitHub Issues](https://github.com/yourusername/clif_mcp_server/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/clif_mcp_server/discussions)
-- 📚 **Documentation**: [Full Documentation](docs/)
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
-## 🏥 Clinical Research Focus
-
-CableCar is designed specifically for clinical research needs:
-
-- **Privacy by Design**: Built for healthcare data requirements  
-- **Reproducible Research**: Supports open science practices
-- **Multi-Site Studies**: Enables federated research collaborations
-- **Clinical Validation**: Statistical methods appropriate for clinical data
+MIT License
 
 ---
 
-*CableCar: Connecting AI to Big Longitudinal EMRs for Clinical Analytics and Research*
+*CableCar v2 -- 45 Python modules, 15 skills, 5 subagents, 2 hooks, 190 tests, 0 PHI leaks.*
