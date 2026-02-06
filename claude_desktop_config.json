@@ -2,7 +2,7 @@
   "mcpServers": {
     "clif": {
       "command": "python",
-      "args": ["./clif_server.py", "--data-path", "./data/synthetic"],
+      "args": ["-m", "server.main", "--data-path", "./data/synthetic"],
       "cwd": "."
     }
   }

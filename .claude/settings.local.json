@@ -3,9 +3,21 @@
     "allow": [
       "Bash(mkdir:*)",
       "Bash(python:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "mcp__CableCar__import_dataset",
+      "mcp__CableCar__explore_data",
+      "mcp__CableCar__run_exploratory_data_analysis",
+      "mcp__CableCar__run_descriptive_statistics",
+      "mcp__CableCar__design_study",
+      "mcp__CableCar__run_hypothesis_testing",
+      "mcp__CableCar__run_regression_analysis",
+      "mcp__CableCar__run_ml_models",
+      "mcp__CableCar__run_strobe_reporter",
+      "mcp__CableCar__run_tripod_reporter",
+      "mcp__CableCar__run_propensity_score_matching",
+      "Bash(git add:*)"
     ],
     "deny": []
   },
-  "enableAllProjectMcpServers": false
+  "enableAllProjectMcpServers": true
 }
