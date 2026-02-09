@@ -219,7 +219,7 @@ class DGPSyntheticGenerator:
 
         else:
             # Continuous: additive model
-            base_mean = np.full(n, params.get("mean", 0.0))
+            base_mean = np.full(n, float(params.get("mean", 0.0)))
             base_std = params.get("std", 1.0)
             for edge in parent_edges:
                 parent_vals = data[edge.cause]

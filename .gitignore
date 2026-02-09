@@ -1,8 +1,8 @@
 # Claude-specific files
 CLAUDE.md
 
-# Data - never commit patient data
-data/
+# Data - never commit patient data (top-level only)
+/data/
 *.csv
 *.parquet
 *.fst
