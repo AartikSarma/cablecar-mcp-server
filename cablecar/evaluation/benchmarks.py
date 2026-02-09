@@ -1,78 +1,151 @@
-"""Clinical research capability benchmarks."""
+"""Hypothesis discovery benchmark runner.
+
+Orchestrates scoring of discovery results against DGP specs and aggregates
+results across scenarios, difficulty tiers, and context levels.
+"""
+
 from __future__ import annotations
-from dataclasses import dataclass, field
+
 from typing import Any
-from cablecar.evaluation.scenarios import SCENARIOS, EvaluationScenario
-from cablecar.evaluation.graders import OutputGrader, GradeResult
 
-@dataclass
-class BenchmarkResult:
-    """Results from running a full benchmark suite."""
-    name: str
-    n_scenarios: int = 0
-    grades: list[GradeResult] = field(default_factory=list)
+from pydantic import BaseModel, Field
 
-    @property
-    def overall_score(self) -> float:
-        if not self.grades:
-            return 0.0
-        return sum(g.overall_score for g in self.grades) / len(self.grades)
+from cablecar.evaluation.dgp import ContextLevel, DGPSpec, DifficultyTier
+from cablecar.evaluation.discovery_result import DiscoveryResult
+from cablecar.evaluation.scoring import DimensionScore, DiscoveryScorer, ScoredResult
 
-    @property
-    def by_domain(self) -> dict[str, float]:
-        domain_scores: dict[str, list[float]] = {}
-        for grade, scenario in zip(self.grades, SCENARIOS[:len(self.grades)]):
-            domain_scores.setdefault(scenario.domain, []).append(grade.overall_score)
-        return {domain: sum(scores)/len(scores) for domain, scores in domain_scores.items()}
 
-    @property
-    def by_difficulty(self) -> dict[str, float]:
-        diff_scores: dict[str, list[float]] = {}
-        for grade, scenario in zip(self.grades, SCENARIOS[:len(self.grades)]):
-            diff_scores.setdefault(scenario.difficulty, []).append(grade.overall_score)
-        return {diff: sum(scores)/len(scores) for diff, scores in diff_scores.items()}
+# ---------------------------------------------------------------------------
+# Score container
+# ---------------------------------------------------------------------------
 
-    def summary(self) -> dict:
-        return {
-            "name": self.name,
-            "n_scenarios": self.n_scenarios,
-            "overall_score": round(self.overall_score, 1),
-            "by_domain": {k: round(v, 1) for k, v in self.by_domain.items()},
-            "by_difficulty": {k: round(v, 1) for k, v in self.by_difficulty.items()},
-            "scenario_scores": [
-                {"scenario": g.scenario_name, "score": round(g.overall_score, 1)}
-                for g in self.grades
-            ],
-        }
 
-class ClinicalBenchmark:
-    """Run benchmark evaluation suites."""
+class BenchmarkScore(BaseModel):
+    """Score for a single benchmark scenario."""
 
-    def __init__(self):
-        self._grader = OutputGrader()
-        self._scenarios = list(SCENARIOS)
+    scenario_name: str
+    difficulty: DifficultyTier
+    context_level: ContextLevel
+    dimension_scores: list[DimensionScore]
+    overall_score: float = Field(ge=0.0, le=1.0)
+    feedback: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
-    def run(self, outputs: dict[str, dict], name: str = "benchmark") -> BenchmarkResult:
-        """Run benchmark against provided outputs.
 
-        Args:
-            outputs: Dict mapping scenario name to analysis output dict
-            name: Name for this benchmark run
+# ---------------------------------------------------------------------------
+# Benchmark runner
+# ---------------------------------------------------------------------------
+
+
+class DiscoveryBenchmark:
+    """Run hypothesis discovery benchmarks.
+
+    Wraps :class:`DiscoveryScorer` and adds aggregation by difficulty,
+    context level, and scoring dimension.
+    """
+
+    def __init__(self) -> None:
+        self._scorer = DiscoveryScorer()
+
+    def run_scenario(
+        self,
+        spec: DGPSpec,
+        result: DiscoveryResult,
+        context_level: ContextLevel | None = None,
+    ) -> BenchmarkScore:
+        """Score a single scenario.
+
+        Parameters
+        ----------
+        spec:
+            DGP specification containing ground truth.
+        result:
+            Discovery agent's output.
+        context_level:
+            Override context level (defaults to ``spec.context_level``).
         """
-        result = BenchmarkResult(name=name, n_scenarios=len(self._scenarios))
+        ctx = context_level if context_level is not None else spec.context_level
+        scored = self._scorer.score(spec, result)
 
-        for scenario in self._scenarios:
-            output = outputs.get(scenario.name, {})
-            grade = self._grader.grade(scenario, output)
-            result.grades.append(grade)
+        return BenchmarkScore(
+            scenario_name=spec.name,
+            difficulty=spec.difficulty,
+            context_level=ctx,
+            dimension_scores=scored.dimension_scores,
+            overall_score=scored.overall_score,
+            feedback=scored.feedback,
+            metadata=scored.metadata,
+        )
 
-        return result
+    def run_suite(
+        self,
+        specs: list[DGPSpec],
+        results: list[DiscoveryResult],
+        context_level: ContextLevel | None = None,
+    ) -> list[BenchmarkScore]:
+        """Score multiple scenarios.
 
-    def list_scenarios(self) -> list[dict]:
-        return [s.to_dict() for s in self._scenarios]
+        ``specs`` and ``results`` must be parallel lists.
+        """
+        if len(specs) != len(results):
+            raise ValueError(
+                f"specs ({len(specs)}) and results ({len(results)}) "
+                "must have the same length."
+            )
+        return [
+            self.run_scenario(spec, result, context_level)
+            for spec, result in zip(specs, results)
+        ]
 
-    def get_scenario(self, name: str) -> EvaluationScenario | None:
-        for s in self._scenarios:
-            if s.name == name:
-                return s
-        return None
+    @staticmethod
+    def summary(scores: list[BenchmarkScore]) -> dict[str, Any]:
+        """Aggregate benchmark scores.
+
+        Returns a dict with:
+        - ``overall``: mean overall score
+        - ``by_difficulty``: mean score per difficulty tier
+        - ``by_context_level``: mean score per context level
+        - ``by_dimension``: mean score per scoring dimension
+        - ``scenarios``: per-scenario breakdown
+        """
+        if not scores:
+            return {"overall": 0.0, "by_difficulty": {}, "by_context_level": {}, "by_dimension": {}, "scenarios": []}
+
+        overall = sum(s.overall_score for s in scores) / len(scores)
+
+        # By difficulty
+        by_diff: dict[str, list[float]] = {}
+        for s in scores:
+            by_diff.setdefault(s.difficulty.value, []).append(s.overall_score)
+        by_difficulty = {k: sum(v) / len(v) for k, v in by_diff.items()}
+
+        # By context level
+        by_ctx: dict[str, list[float]] = {}
+        for s in scores:
+            by_ctx.setdefault(s.context_level.value, []).append(s.overall_score)
+        by_context_level = {k: sum(v) / len(v) for k, v in by_ctx.items()}
+
+        # By dimension
+        by_dim: dict[str, list[float]] = {}
+        for s in scores:
+            for dim in s.dimension_scores:
+                by_dim.setdefault(dim.name, []).append(dim.score)
+        by_dimension = {k: sum(v) / len(v) for k, v in by_dim.items()}
+
+        scenarios = [
+            {
+                "name": s.scenario_name,
+                "difficulty": s.difficulty.value,
+                "context_level": s.context_level.value,
+                "overall": round(s.overall_score, 4),
+            }
+            for s in scores
+        ]
+
+        return {
+            "overall": round(overall, 4),
+            "by_difficulty": {k: round(v, 4) for k, v in by_difficulty.items()},
+            "by_context_level": {k: round(v, 4) for k, v in by_context_level.items()},
+            "by_dimension": {k: round(v, 4) for k, v in by_dimension.items()},
+            "scenarios": scenarios,
+        }

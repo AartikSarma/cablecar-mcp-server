@@ -1,3 +1,4 @@
-from cablecar.evaluation.benchmarks import ClinicalBenchmark
-from cablecar.evaluation.graders import OutputGrader
-from cablecar.evaluation.scenarios import EvaluationScenario
+from cablecar.evaluation.benchmarks import BenchmarkScore, DiscoveryBenchmark
+from cablecar.evaluation.dgp import DGPSpec
+from cablecar.evaluation.discovery_result import DiscoveryResult
+from cablecar.evaluation.scoring import DiscoveryScorer
