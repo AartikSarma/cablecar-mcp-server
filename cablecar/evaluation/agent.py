@@ -140,6 +140,8 @@ class BenchmarkHarness:
         generator = DGPSyntheticGenerator(spec)
         tables, _ = generator.generate()
         context = self._build_context(spec, context_level)
+        if hasattr(self.agent, "prepare"):
+            self.agent.prepare(spec)
         result = self.agent.run(tables, context)
         return self._benchmark.run_scenario(spec, result, context_level)
 
@@ -274,6 +276,11 @@ class StatisticalAgent(DiscoveryAgent):
         if quality not in ("perfect", "partial", "naive"):
             raise ValueError(f"quality must be 'perfect', 'partial', or 'naive', got '{quality}'")
         self.quality = quality
+        self._spec: DGPSpec | None = None
+
+    def prepare(self, spec: DGPSpec) -> None:
+        """Provide the DGP spec for ground-truth-aware analysis."""
+        self._spec = spec
 
     def run(
         self,
@@ -282,20 +289,15 @@ class StatisticalAgent(DiscoveryAgent):
     ) -> DiscoveryResult:
         """Analyze tables using logistic regression at the configured quality level.
 
-        Requires that ``context.schema_info`` was built from a :class:`DGPSpec`
-        so we can infer the spec. For standalone use, the caller provides
-        ``ground_truth_spec`` in context metadata.
+        Requires that :meth:`prepare` was called with a :class:`DGPSpec`
+        before calling ``run()``.
         """
-        # The harness always passes a spec alongside; but the agent protocol
-        # only receives tables + context.  StatisticalAgent needs the spec
-        # to know ground truth variable names.  We stash it on the instance
-        # before calling run().
-        spec = getattr(self, "_current_spec", None)
-        if spec is None:
+        if self._spec is None:
             raise RuntimeError(
-                "StatisticalAgent requires _current_spec to be set "
-                "before calling run(). Use BenchmarkHarness or set it manually."
+                "StatisticalAgent requires prepare(spec) to be called "
+                "before run(). Use BenchmarkHarness or call prepare() manually."
             )
+        spec = self._spec
 
         patient_df = _reconstruct_patient_data(tables, spec)
         gt = spec.ground_truth

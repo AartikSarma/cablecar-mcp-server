@@ -6,8 +6,6 @@ ClaudeDiscoveryAgent tool dispatch (mocked API).
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from cablecar.evaluation.agent import (
@@ -149,7 +147,7 @@ class TestAgentContext:
 class TestStatisticalAgent:
     def test_perfect_produces_valid_result(self, easy_spec, easy_tables):
         agent = StatisticalAgent(quality="perfect")
-        agent._current_spec = easy_spec
+        agent.prepare(easy_spec)
         ctx = AgentContext(context_level=ContextLevel.FULL_VIGNETTE)
         result = agent.run(easy_tables, ctx)
 
@@ -161,7 +159,7 @@ class TestStatisticalAgent:
 
     def test_partial_fewer_confounders(self, easy_spec, easy_tables):
         agent = StatisticalAgent(quality="partial")
-        agent._current_spec = easy_spec
+        agent.prepare(easy_spec)
         ctx = AgentContext(context_level=ContextLevel.DOMAIN_HINT)
         result = agent.run(easy_tables, ctx)
 
@@ -170,7 +168,7 @@ class TestStatisticalAgent:
 
     def test_naive_no_adjustment(self, easy_spec, easy_tables):
         agent = StatisticalAgent(quality="naive")
-        agent._current_spec = easy_spec
+        agent.prepare(easy_spec)
         ctx = AgentContext(context_level=ContextLevel.BLIND)
         result = agent.run(easy_tables, ctx)
 
@@ -195,17 +193,7 @@ class TestStatisticalAgent:
 class TestBenchmarkHarness:
     def test_run_scenario(self, easy_spec):
         agent = StatisticalAgent(quality="perfect")
-        agent._current_spec = easy_spec
         harness = BenchmarkHarness(agent)
-
-        # Monkey-patch so harness sets spec before calling run
-        original_run_scenario = harness.run_scenario
-
-        def patched_run_scenario(spec, ctx):
-            agent._current_spec = spec
-            return original_run_scenario(spec, ctx)
-
-        harness.run_scenario = patched_run_scenario
 
         score = harness.run_scenario(easy_spec, ContextLevel.FULL_VIGNETTE)
         assert isinstance(score, BenchmarkScore)
@@ -215,14 +203,6 @@ class TestBenchmarkHarness:
     def test_run_suite(self, easy_spec):
         agent = StatisticalAgent(quality="perfect")
         harness = BenchmarkHarness(agent)
-
-        original_run_scenario = harness.run_scenario
-
-        def patched_run_scenario(spec, ctx):
-            agent._current_spec = spec
-            return original_run_scenario(spec, ctx)
-
-        harness.run_scenario = patched_run_scenario
 
         scores = harness.run_suite(
             [easy_spec],
@@ -235,14 +215,6 @@ class TestBenchmarkHarness:
     def test_run_full_benchmark(self, easy_spec):
         agent = StatisticalAgent(quality="perfect")
         harness = BenchmarkHarness(agent)
-
-        original_run_scenario = harness.run_scenario
-
-        def patched_run_scenario(spec, ctx):
-            agent._current_spec = spec
-            return original_run_scenario(spec, ctx)
-
-        harness.run_scenario = patched_run_scenario
 
         result = harness.run_full_benchmark(
             [easy_spec],
