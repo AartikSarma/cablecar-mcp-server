@@ -56,3 +56,8 @@ archive/
 
 # Generated
 *.log
+
+# Design assets
+*.png
+*.jpg
+*.jpeg
