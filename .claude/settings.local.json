@@ -15,7 +15,10 @@
       "mcp__CableCar__run_strobe_reporter",
       "mcp__CableCar__run_tripod_reporter",
       "mcp__CableCar__run_propensity_score_matching",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "WebFetch(domain:clif-icu.com)",
+      "Bash(uv run python:*)",
+      "WebSearch"
     ],
     "deny": []
   },
