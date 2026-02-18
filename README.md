@@ -176,9 +176,8 @@ uv sync --dev
 CableCar uses synthetic CLIF data (8,000 patients, 10,000 hospitalizations, 28 tables) from [synthetic_clif](https://github.com/AartikSarma/synthetic_clif):
 
 ```bash
-# Clone and copy synthetic data
-git clone https://github.com/AartikSarma/synthetic_clif.git /tmp/synthetic_clif
-cp /tmp/synthetic_clif/synth_clif_10k/*.parquet data/synthetic/
+# Or download directly
+curl -L https://github.com/AartikSarma/synthetic_clif/releases/download/v0.4.0/synth_clif_10k.tar.gz | tar -xz -C synth_clif_10k
 ```
 
 ### Run Tests
