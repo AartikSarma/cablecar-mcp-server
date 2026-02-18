@@ -1,8 +1,9 @@
 # Claude-specific files
 CLAUDE.md
 
-# Data - never commit patient data (top-level only)
-/data/
+# Data - never commit patient data
+data/
+synth_clif_10k/
 *.csv
 *.parquet
 *.fst
