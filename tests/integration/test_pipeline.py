@@ -83,22 +83,25 @@ class TestFullWorkflow:
             study_name="ICU Mortality Study",
             data_source="./data/synthetic",
             schema_name="clif",
+            tables_used=["patient", "hospitalization"],
             cohort_definition={
                 "inclusion": [{"column": "age_at_admission", "op": ">=", "value": 18}],
             },
         )
-        prov.add_step("table1", "Descriptive analysis")
-        prov.add_step("regression_analysis", "Logistic regression: mortality ~ age")
+        prov.add_step(
+            "table1", "Descriptive analysis",
+            analysis_type="descriptive",
+            parameters={"variables": ["age_at_admission", "hospital_mortality"]},
+        )
+        prov.add_step(
+            "regression_analysis", "Logistic regression: mortality ~ age",
+            analysis_type="regression",
+            parameters={"outcome": "hospital_mortality", "predictors": ["age_at_admission"]},
+        )
 
         gen = CodeGenerator()
-        python_code = gen.generate("python", "regression", prov,
-                                   outcome="hospital_mortality",
-                                   predictors=["age_at_admission"],
-                                   model_type="logistic")
-        r_code = gen.generate("r", "regression", prov,
-                              outcome="hospital_mortality",
-                              predictors=["age_at_admission"],
-                              model_type="logistic")
+        python_code = gen.generate_scaffold("python", prov)
+        r_code = gen.generate_scaffold("r", prov)
         assert "import" in python_code
         assert "library" in r_code
 
