@@ -1,7 +1,6 @@
 """Tests for the LLM agent framework.
 
-Tests StatisticalAgent, BenchmarkHarness, AgentContext, and
-ClaudeDiscoveryAgent tool dispatch (mocked API).
+Tests StatisticalAgent, BenchmarkHarness, and AgentContext.
 """
 
 from __future__ import annotations
@@ -224,54 +223,3 @@ class TestBenchmarkHarness:
         assert "scores" in result
 
 
-# ---------------------------------------------------------------------------
-# ClaudeDiscoveryAgent (mocked API)
-# ---------------------------------------------------------------------------
-
-
-class TestClaudeDiscoveryAgent:
-    def test_import(self):
-        from cablecar.evaluation.claude_agent import ClaudeDiscoveryAgent
-        agent = ClaudeDiscoveryAgent(model="claude-sonnet-4-5-20250929")
-        assert agent.model == "claude-sonnet-4-5-20250929"
-        assert agent.max_turns == 15
-
-    def test_tool_dispatch_get_schema(self, easy_tables):
-        from cablecar.evaluation.claude_agent import ClaudeDiscoveryAgent
-        agent = ClaudeDiscoveryAgent()
-        result = agent._dispatch_tool("get_schema", {}, easy_tables)
-        assert "tables" in result
-        assert "patient" in result["tables"]
-
-    def test_tool_dispatch_query_data(self, easy_tables):
-        from cablecar.evaluation.claude_agent import ClaudeDiscoveryAgent
-        agent = ClaudeDiscoveryAgent()
-        result = agent._dispatch_tool(
-            "query_data",
-            {"table": "patient"},
-            easy_tables,
-        )
-        assert result["table"] == "patient"
-        assert result["rows"] == 500
-
-    def test_tool_dispatch_unknown(self, easy_tables):
-        from cablecar.evaluation.claude_agent import ClaudeDiscoveryAgent
-        agent = ClaudeDiscoveryAgent()
-        result = agent._dispatch_tool("nonexistent_tool", {}, easy_tables)
-        assert "error" in result
-
-    def test_parse_submit(self):
-        from cablecar.evaluation.claude_agent import ClaudeDiscoveryAgent
-        agent = ClaudeDiscoveryAgent()
-        raw = {
-            "identified_exposure": "vasopressors",
-            "identified_outcome": "mortality",
-            "primary_hypothesis": "Vasopressors increase mortality",
-            "estimated_effect": 0.95,
-            "confidence_interval": [0.5, 1.4],
-        }
-        result = agent._parse_submit(raw, [])
-        assert isinstance(result, DiscoveryResult)
-        assert result.identified_exposure == "vasopressors"
-        assert result.estimated_effect == 0.95
-        assert result.confidence_interval == (0.5, 1.4)

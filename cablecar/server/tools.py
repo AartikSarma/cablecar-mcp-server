@@ -249,8 +249,12 @@ class DataServerTools:
                 result = self._regression_analysis(cohort, params)
             elif analysis_type == "subgroup":
                 result = self._subgroup_analysis(cohort, params)
+            elif analysis_type == "survival":
+                result = self._survival_analysis(cohort, params)
+            elif analysis_type == "xgboost":
+                result = self._xgboost_analysis(cohort, params)
             else:
-                result = {"error": f"Unknown analysis type: {analysis_type}. Supported: summary_stats, descriptive, hypothesis, regression, subgroup"}
+                result = {"error": f"Unknown analysis type: {analysis_type}. Supported: summary_stats, descriptive, hypothesis, regression, subgroup, survival, xgboost"}
 
             self.audit.log_tool_call(
                 "execute_analysis",
@@ -554,6 +558,223 @@ class DataServerTools:
                 "n": sub.n,
                 "result": sub_result,
             }
+
+        return result
+
+    def _survival_analysis(self, cohort: Cohort, params: dict) -> dict:
+        """Perform survival analysis using lifelines (Cox PH or Kaplan-Meier).
+
+        Parameters (via params dict):
+            table: Table name (default "hospitalization")
+            time_column: Column with time-to-event values
+            event_column: Column with event indicator (1=event, 0=censored)
+            predictors: List of predictor column names (for Cox PH)
+            model: "cox_ph" or "kaplan_meier" (default "cox_ph")
+        """
+        try:
+            from lifelines import CoxPHFitter, KaplanMeierFitter
+        except ImportError:
+            return {"error": "lifelines is required for survival analysis. Install with: pip install lifelines"}
+
+        model_type = params.get("model", "cox_ph")
+        time_column = params.get("time_column")
+        event_column = params.get("event_column")
+        predictors = params.get("predictors", [])
+        table_name = params.get("table", "hospitalization")
+
+        if not time_column or not event_column:
+            return {"error": "Must specify 'time_column' and 'event_column'"}
+
+        df = cohort.get_table(table_name)
+        if df is None:
+            return {"error": f"Table '{table_name}' not in cohort"}
+
+        result: dict[str, Any] = {
+            "analysis": "survival",
+            "model": model_type,
+            "time_column": time_column,
+            "event_column": event_column,
+            "table": table_name,
+        }
+
+        if model_type == "kaplan_meier":
+            km_df = df[[time_column, event_column]].dropna()
+            result["n"] = len(km_df)
+            result["n_events"] = int(km_df[event_column].sum())
+            result["n_excluded_missing"] = len(df) - len(km_df)
+
+            kmf = KaplanMeierFitter()
+            kmf.fit(km_df[time_column], event_observed=km_df[event_column])
+
+            result["median_survival"] = (
+                round(float(kmf.median_survival_time_), 2)
+                if np.isfinite(kmf.median_survival_time_)
+                else None
+            )
+
+            # Report survival at selected time points
+            timeline = kmf.survival_function_at_times(
+                [kmf.timeline[len(kmf.timeline) // 4],
+                 kmf.timeline[len(kmf.timeline) // 2],
+                 kmf.timeline[3 * len(kmf.timeline) // 4]]
+            )
+            result["survival_probabilities"] = {
+                str(round(float(t), 2)): round(float(s), 4)
+                for t, s in zip(timeline.index, timeline.values.flatten())
+            }
+
+        elif model_type == "cox_ph":
+            if not predictors:
+                return {"error": "Cox PH requires 'predictors' list"}
+
+            cols_needed = [time_column, event_column] + predictors
+            cox_df = df[[c for c in cols_needed if c in df.columns]].dropna()
+            result["n"] = len(cox_df)
+            result["n_events"] = int(cox_df[event_column].sum())
+            result["n_excluded_missing"] = len(df) - len(cox_df)
+
+            cph = CoxPHFitter()
+            try:
+                cph.fit(
+                    cox_df,
+                    duration_col=time_column,
+                    event_col=event_column,
+                )
+            except Exception as exc:
+                result["error"] = f"Cox PH fitting failed: {exc}"
+                return result
+
+            result["predictors"] = predictors
+            result["coefficients"] = {}
+            summary = cph.summary
+            for predictor in summary.index:
+                result["coefficients"][str(predictor)] = {
+                    "coefficient": round(float(summary.loc[predictor, "coef"]), 4),
+                    "hazard_ratio": round(float(summary.loc[predictor, "exp(coef)"]), 4),
+                    "std_error": round(float(summary.loc[predictor, "se(coef)"]), 4),
+                    "z_value": round(float(summary.loc[predictor, "z"]), 4),
+                    "p_value": round(float(summary.loc[predictor, "p"]), 6),
+                    "ci_lower": round(float(summary.loc[predictor, "coef lower 95%"]), 4),
+                    "ci_upper": round(float(summary.loc[predictor, "coef upper 95%"]), 4),
+                }
+
+            result["concordance_index"] = round(float(cph.concordance_index_), 4)
+            result["log_likelihood_ratio_p"] = round(
+                float(cph.log_likelihood_ratio_test().p_value), 6
+            )
+        else:
+            result["error"] = f"Unsupported survival model: {model_type}. Supported: cox_ph, kaplan_meier"
+
+        return result
+
+    def _xgboost_analysis(self, cohort: Cohort, params: dict) -> dict:
+        """Perform gradient boosting prediction models using scikit-learn.
+
+        Uses GradientBoostingClassifier/Regressor to avoid requiring
+        the xgboost package as an additional dependency.
+
+        Parameters (via params dict):
+            table: Table name (default "hospitalization")
+            outcome: Target variable column name
+            predictors: List of predictor column names
+            model: "classifier" or "regressor" (default "classifier")
+            cv_folds: Number of cross-validation folds (default 5)
+        """
+        from sklearn.ensemble import (
+            GradientBoostingClassifier,
+            GradientBoostingRegressor,
+        )
+        from sklearn.model_selection import cross_val_score
+
+        model_type = params.get("model", "classifier")
+        outcome = params.get("outcome")
+        predictors = params.get("predictors", [])
+        cv_folds = params.get("cv_folds", 5)
+        table_name = params.get("table", "hospitalization")
+
+        if not outcome or not predictors:
+            return {"error": "Must specify 'outcome' and 'predictors'"}
+
+        df = cohort.get_table(table_name)
+        if df is None:
+            return {"error": f"Table '{table_name}' not in cohort"}
+
+        cols_needed = [outcome] + predictors
+        model_df = df[[c for c in cols_needed if c in df.columns]].dropna()
+
+        y = model_df[outcome]
+        X = model_df[predictors]
+
+        # Handle categorical predictors
+        X = pd.get_dummies(X, drop_first=True, dtype=float)
+
+        result: dict[str, Any] = {
+            "analysis": "xgboost",
+            "model_type": model_type,
+            "outcome": outcome,
+            "predictors": predictors,
+            "n": len(model_df),
+            "n_excluded_missing": len(df) - len(model_df),
+            "cv_folds": cv_folds,
+        }
+
+        try:
+            if model_type == "classifier":
+                if y.nunique() < 2:
+                    return {"error": "Classification requires at least 2 classes in outcome"}
+
+                estimator = GradientBoostingClassifier(
+                    n_estimators=100,
+                    max_depth=3,
+                    random_state=42,
+                )
+                scoring = "roc_auc" if y.nunique() == 2 else "accuracy"
+                cv_scores = cross_val_score(
+                    estimator, X, y, cv=cv_folds, scoring=scoring,
+                )
+                result["metric"] = scoring
+                result["cv_scores"] = [round(float(s), 4) for s in cv_scores]
+                result["cv_mean"] = round(float(cv_scores.mean()), 4)
+                result["cv_std"] = round(float(cv_scores.std()), 4)
+
+                # Fit on full data for feature importances
+                estimator.fit(X, y)
+                result["feature_importances"] = {
+                    str(col): round(float(imp), 4)
+                    for col, imp in sorted(
+                        zip(X.columns, estimator.feature_importances_),
+                        key=lambda x: -x[1],
+                    )
+                }
+
+            elif model_type == "regressor":
+                estimator = GradientBoostingRegressor(
+                    n_estimators=100,
+                    max_depth=3,
+                    random_state=42,
+                )
+                cv_scores = cross_val_score(
+                    estimator, X, y, cv=cv_folds, scoring="neg_root_mean_squared_error",
+                )
+                result["metric"] = "rmse"
+                result["cv_scores"] = [round(float(-s), 4) for s in cv_scores]
+                result["cv_mean"] = round(float(-cv_scores.mean()), 4)
+                result["cv_std"] = round(float(cv_scores.std()), 4)
+
+                # Fit on full data for feature importances
+                estimator.fit(X, y)
+                result["feature_importances"] = {
+                    str(col): round(float(imp), 4)
+                    for col, imp in sorted(
+                        zip(X.columns, estimator.feature_importances_),
+                        key=lambda x: -x[1],
+                    )
+                }
+            else:
+                result["error"] = f"Unsupported model type: {model_type}. Supported: classifier, regressor"
+
+        except Exception as exc:
+            result["error"] = f"Model fitting failed: {exc}"
 
         return result
 

@@ -92,14 +92,14 @@ def create_server(data_path: str | None = None) -> tuple[Server, DataServerTools
             ),
             Tool(
                 name="execute_analysis",
-                description="Execute a statistical analysis on a defined cohort. Returns privacy-sanitized results (coefficients, CIs, p-values, aggregated statistics). Never returns raw patient data. Supported types: summary_stats, descriptive, hypothesis, regression, subgroup.",
+                description="Execute a statistical analysis on a defined cohort. Returns privacy-sanitized results (coefficients, CIs, p-values, aggregated statistics). Never returns raw patient data. Supported types: summary_stats, descriptive, hypothesis, regression, subgroup, survival, xgboost.",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "analysis_type": {
                             "type": "string",
-                            "description": "Type: summary_stats, descriptive, hypothesis, regression, subgroup",
-                            "enum": ["summary_stats", "descriptive", "hypothesis", "regression", "subgroup"],
+                            "description": "Type: summary_stats, descriptive, hypothesis, regression, subgroup, survival, xgboost",
+                            "enum": ["summary_stats", "descriptive", "hypothesis", "regression", "subgroup", "survival", "xgboost"],
                         },
                         "params": {
                             "type": "object",

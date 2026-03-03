@@ -1,26 +1,29 @@
 #!/usr/bin/env python
 """Run the hypothesis discovery benchmark suite.
 
+Supports both statistical agents and LLM agents (via the model-agnostic
+tool-use harness).
+
 Usage examples::
 
     # Statistical agent only, one quality/context combination
     uv run python scripts/run_benchmark.py \\
-        --agents statistical \\
         --qualities perfect \\
         --contexts full_vignette
 
     # Full statistical matrix
     uv run python scripts/run_benchmark.py \\
-        --agents statistical \\
         --qualities perfect partial naive \\
         --contexts full_vignette domain_hint blind \\
         --output results/benchmark_run.json
 
-    # Include Claude agent (requires ANTHROPIC_API_KEY)
+    # LLM agent (requires API key)
     uv run python scripts/run_benchmark.py \\
-        --agents statistical claude \\
-        --model claude-sonnet-4-5-20250929 \\
-        --output results/benchmark_run.json
+        --agent llm \\
+        --provider anthropic \\
+        --model claude-sonnet-4-5-20250514 \\
+        --scenario easy \\
+        --contexts full_vignette
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from typing import Any
 from cablecar.evaluation.agent import BenchmarkHarness, StatisticalAgent
 from cablecar.evaluation.benchmarks import BenchmarkScore, DiscoveryBenchmark
 from cablecar.evaluation.dgp import ContextLevel, DGPSpec
+from cablecar.evaluation.harness import ToolUseAgent
 from cablecar.evaluation.scenarios import ALL_SCENARIOS
 
 
@@ -44,27 +48,40 @@ VALID_CONTEXTS = {
     "domain_hint": ContextLevel.DOMAIN_HINT,
     "blind": ContextLevel.BLIND,
 }
+VALID_PROVIDERS = ("anthropic", "google", "openai")
+
+
+def _build_llm_agent(
+    provider: str,
+    model: str | None = None,
+    max_turns: int = 20,
+) -> tuple[str, Any]:
+    """Build (label, agent) for an LLM provider."""
+    if provider == "anthropic":
+        from cablecar.evaluation.adapters.anthropic import AnthropicAdapter
+        adapter = AnthropicAdapter(model=model or "claude-sonnet-4-5-20250514")
+    elif provider == "google":
+        from cablecar.evaluation.adapters.google import GoogleAdapter
+        adapter = GoogleAdapter(model=model or "gemini-2.0-flash")
+    elif provider == "openai":
+        from cablecar.evaluation.adapters.openai import OpenAIAdapter
+        adapter = OpenAIAdapter(model=model or "gpt-4o")
+    else:
+        raise ValueError(f"Unknown provider: {provider}")
+
+    label = f"llm_{provider}_{adapter.model_name}"
+    agent = ToolUseAgent(adapter, max_turns=max_turns)
+    return label, agent
 
 
 def _build_agents(
-    agent_names: list[str],
     qualities: list[str],
-    model: str,
 ) -> list[tuple[str, Any]]:
     """Build (label, agent) pairs from CLI arguments."""
     agents: list[tuple[str, Any]] = []
-    for name in agent_names:
-        if name == "statistical":
-            for quality in qualities:
-                label = f"statistical_{quality}"
-                agents.append((label, StatisticalAgent(quality=quality)))
-        elif name == "claude":
-            from cablecar.evaluation.claude_agent import ClaudeDiscoveryAgent
-
-            agents.append(("claude", ClaudeDiscoveryAgent(model=model)))
-        else:
-            print(f"Unknown agent: {name}", file=sys.stderr)
-            sys.exit(1)
+    for quality in qualities:
+        label = f"statistical_{quality}"
+        agents.append((label, StatisticalAgent(quality=quality)))
     return agents
 
 
@@ -195,17 +212,16 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  %(prog)s --agents statistical --qualities perfect --contexts full_vignette\n"
-            "  %(prog)s --agents statistical --qualities perfect partial naive --output results.json\n"
-            "  %(prog)s --agents statistical claude --model claude-sonnet-4-5-20250929\n"
+            "  %(prog)s --qualities perfect --contexts full_vignette\n"
+            "  %(prog)s --qualities perfect partial naive --output results.json\n"
+            "  %(prog)s --agent llm --provider anthropic --scenarios easy --contexts full_vignette\n"
         ),
     )
     parser.add_argument(
-        "--agents",
-        nargs="+",
-        choices=["statistical", "claude"],
-        default=["statistical"],
-        help="Agent types to benchmark (default: statistical)",
+        "--agent",
+        choices=["statistical", "llm"],
+        default="statistical",
+        help="Agent type: 'statistical' (default) or 'llm' (requires API key)",
     )
     parser.add_argument(
         "--qualities",
@@ -213,6 +229,24 @@ def main() -> None:
         choices=VALID_QUALITIES,
         default=list(VALID_QUALITIES),
         help="Quality levels for the statistical agent (default: all)",
+    )
+    parser.add_argument(
+        "--provider",
+        choices=VALID_PROVIDERS,
+        default="anthropic",
+        help="LLM provider (default: anthropic). Only used when --agent=llm.",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Model identifier (e.g. 'claude-sonnet-4-5-20250514'). Uses provider default if omitted.",
+    )
+    parser.add_argument(
+        "--max-turns",
+        type=int,
+        default=20,
+        help="Maximum tool-use turns for LLM agents (default: 20).",
     )
     parser.add_argument(
         "--contexts",
@@ -229,11 +263,6 @@ def main() -> None:
         help="Scenario difficulty tiers to include (default: all)",
     )
     parser.add_argument(
-        "--model",
-        default="claude-sonnet-4-5-20250929",
-        help="Claude model ID (only used with --agents claude)",
-    )
-    parser.add_argument(
         "--output",
         type=str,
         default=None,
@@ -245,7 +274,16 @@ def main() -> None:
     run_id = datetime.now(timezone.utc).isoformat()
     specs = [ALL_SCENARIOS[name]() for name in args.scenarios]
     context_levels = [VALID_CONTEXTS[c] for c in args.contexts]
-    agents = _build_agents(args.agents, args.qualities, args.model)
+
+    if args.agent == "llm":
+        label, agent = _build_llm_agent(
+            provider=args.provider,
+            model=args.model,
+            max_turns=args.max_turns,
+        )
+        agents = [(label, agent)]
+    else:
+        agents = _build_agents(args.qualities)
 
     print(f"Benchmark run: {run_id}")
     print(f"  Agents: {[label for label, _ in agents]}")
